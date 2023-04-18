@@ -23,6 +23,10 @@
     "types": "./dist/ts-transformer-churi.d.ts",
     "default": "./dist/ts-transformer-churi.js"
   },
+  "peerDependencies": {
+    "churi": "^0.5.0",
+    "typescript": "5.0.4 - 5.1.0"
+  },
   "devDependencies": {
     "@jest/globals": "^29.5.0",
     "@run-z/eslint-config": "^3.3.1",
@@ -32,6 +36,7 @@
     "@swc/jest": "^0.2.26",
     "@typescript-eslint/eslint-plugin": "^5.58.0",
     "@typescript-eslint/parser": "^5.58.0",
+    "churi": "^0.5.0",
     "eslint": "^8.38.0",
     "eslint-plugin-jest": "^27.2.1",
     "gh-pages": "^5.0.0",
