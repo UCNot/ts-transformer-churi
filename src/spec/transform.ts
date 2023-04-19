@@ -19,15 +19,15 @@ export function transform(
 
   const { diagnostics } = program.emit(
     undefined /* all files */,
-    (fileName, text) => {
-      if (fileName === filePath) {
+    (fileName, text, _writeByteOrderMark, _onError, sourceFiles) => {
+      if (fileName.endsWith('.js') && sourceFiles?.find(({ fileName }) => fileName === filePath)) {
         output = text;
       }
     },
     undefined,
     false,
     {
-      after: [ucTransformer.createTransformerFactory()],
+      before: [ucTransformer.createTransformerFactory()],
     },
   );
 
