@@ -1,15 +1,25 @@
+import path from 'node:path';
 import ts from 'typescript';
+import { UcTransformerOptions } from '../uc-transformer-options.js';
+import { guessDistFile } from './guess-dist-file.js';
 import { UcCompiler, UcCompilerTasks } from './uc-compiler.js';
 
 export class UcTransformer {
 
   readonly #typeChecker: ts.TypeChecker;
   readonly #tasks: UcCompilerTasks;
+  readonly #reservedIds = new Set<string>();
   #churiExports?: ChuriExports;
+  #distFile: string;
 
-  constructor(program: ts.Program, tasks: UcCompilerTasks = new UcCompiler()) {
+  constructor(
+    program: ts.Program,
+    tasks: UcCompilerTasks = new UcCompiler(),
+    { distFile = guessDistFile() }: UcTransformerOptions = {},
+  ) {
     this.#typeChecker = program.getTypeChecker();
     this.#tasks = tasks;
+    this.#distFile = distFile;
   }
 
   createTransformerFactory(): ts.TransformerFactory<ts.SourceFile> {
@@ -20,10 +30,25 @@ export class UcTransformer {
     sourceFile: ts.SourceFile,
     context: ts.TransformationContext,
   ): ts.SourceFile {
-    return ts.visitNode(sourceFile, node => this.#transform(node, context)) as ts.SourceFile;
+    const imports: ts.ImportDeclaration[] = [];
+    const srcContext: SourceFileContext = {
+      context,
+      sourceFile,
+      imports,
+    };
+
+    const result = ts.visitNode(sourceFile, node => this.#transform(node, srcContext)) as ts.SourceFile;
+
+    if (!imports.length) {
+      return result;
+    }
+
+    const { factory } = context;
+
+    return factory.updateSourceFile(result, [...imports, ...result.statements]);
   }
 
-  #transform(node: ts.Node, context: ts.TransformationContext): ts.Node | ts.Node[] {
+  #transform(node: ts.Node, srcContext: SourceFileContext): ts.Node | ts.Node[] {
     if (ts.isStatement(node)) {
       if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
         this.#importOrExport(node);
@@ -31,19 +56,19 @@ export class UcTransformer {
         return node;
       }
 
-      return this.#statement(node, context);
+      return this.#statement(node, srcContext);
     }
 
-    return this.#each(node, context);
+    return this.#each(node, srcContext);
   }
 
-  #each<TNode extends ts.Node>(node: TNode, context: ts.TransformationContext): TNode {
-    return ts.visitEachChild(node, node => this.#transform(node, context), context);
+  #each<TNode extends ts.Node>(node: TNode, srcContext: SourceFileContext): TNode {
+    return ts.visitEachChild(node, node => this.#transform(node, srcContext), srcContext.context);
   }
 
-  #statement(statement: ts.Statement, context: ts.TransformationContext): ts.Node | ts.Node[] {
+  #statement(statement: ts.Statement, srcContext: SourceFileContext): ts.Node | ts.Node[] {
     const stContext: StatementContext = {
-      context,
+      srcContext,
       statement,
       prefix: [],
     };
@@ -51,7 +76,7 @@ export class UcTransformer {
     const result = ts.visitEachChild(
       statement,
       node => this.#transformExpression(node, stContext),
-      context,
+      srcContext.context,
     );
 
     return [...stContext.prefix, result];
@@ -69,7 +94,7 @@ export class UcTransformer {
     return ts.visitEachChild(
       node,
       node => this.#transformExpression(node, context),
-      context.context,
+      context.srcContext.context,
     );
   }
 
@@ -140,41 +165,93 @@ export class UcTransformer {
   #createDeserializer(node: ts.CallExpression, context: StatementContext): ts.Node {
     this.#tasks.compileUcDeserializer();
 
-    return this.#extractModel(node, context);
+    return this.#extractModel(node, context, 'readValue');
   }
 
   #createSerializer(node: ts.CallExpression, context: StatementContext): ts.Node {
     this.#tasks.compileUcSerializer();
 
-    return this.#extractModel(node, context);
+    return this.#extractModel(node, context, 'writeValue');
   }
 
-  #extractModel(node: ts.CallExpression, context: StatementContext): ts.Node {
-    const { factory } = context.context;
-    const { parent } = node;
-    let modelId: ts.Identifier | undefined;
+  #extractModel(node: ts.CallExpression, context: StatementContext, suffix: string): ts.Node {
+    const { srcContext } = context;
+    const {
+      sourceFile,
+      context: { factory },
+    } = srcContext;
+    const { modelId, fnId } = this.#createIds(node, context, suffix);
+
+    context.prefix.push(
+      factory.createVariableStatement(
+        [factory.createModifier(ts.SyntaxKind.ExportKeyword)],
+        factory.createVariableDeclarationList(
+          [factory.createVariableDeclaration(modelId, undefined, undefined, node.arguments[0])],
+          ts.NodeFlags.Const,
+        ),
+      ),
+    );
+
+    const fnAlias = factory.createUniqueName(fnId);
+
+    srcContext.imports.push(
+      factory.createImportDeclaration(
+        undefined,
+        factory.createImportClause(
+          false,
+          undefined,
+          factory.createNamedImports([
+            factory.createImportSpecifier(false, factory.createIdentifier(fnId), fnAlias),
+          ]),
+        ),
+        factory.createStringLiteral(
+          path.relative(path.dirname(sourceFile.fileName), this.#distFile),
+        ),
+      ),
+    );
+
+    return fnAlias;
+  }
+
+  #createIds(
+    { parent }: ts.CallExpression,
+    { srcContext }: StatementContext,
+    suggested: string,
+  ): { modelId: ts.Identifier; fnId: string } {
+    const {
+      context: { factory },
+    } = srcContext;
 
     if (ts.isVariableDeclaration(parent)) {
       const { name } = parent;
 
       if (ts.isIdentifier(name)) {
-        modelId = factory.createUniqueName(name.text + UC_MODEL_SUFFIX);
+        return {
+          modelId: factory.createUniqueName(name.text + UC_MODEL_SUFFIX),
+          fnId: this.#reserveId(name.text),
+        };
       }
     }
 
-    modelId ??= factory.createUniqueName(UC_MODEL_SUFFIX);
+    return { modelId: factory.createUniqueName(UC_MODEL_SUFFIX), fnId: this.#reserveId(suggested) };
+  }
 
-    const modelDecl = factory.createVariableStatement(
-      [factory.createModifier(ts.SyntaxKind.ExportKeyword)],
-      factory.createVariableDeclarationList(
-        [factory.createVariableDeclaration(modelId, undefined, undefined, node.arguments[0])],
-        ts.NodeFlags.Const,
-      ),
-    );
+  #reserveId(suggested: string): string {
+    if (!this.#reservedIds.has(suggested)) {
+      this.#reservedIds.add(suggested);
 
-    context.prefix.push(modelDecl);
+      return suggested;
+    }
 
-    return factory.updateCallExpression(node, node.expression, node.typeArguments, [modelId]);
+    for (let i = 1; ; ++i) {
+      const id = `${suggested}$${i}`;
+
+      if (!this.#reservedIds.has(id)) {
+        this.#reservedIds.add(id);
+
+        return id;
+      }
+    }
   }
 
 }
@@ -186,8 +263,14 @@ interface ChuriExports {
   readonly createUcSerializer: ts.Symbol;
 }
 
-interface StatementContext {
+interface SourceFileContext {
   readonly context: ts.TransformationContext;
+  readonly sourceFile: ts.SourceFile;
+  readonly imports: ts.ImportDeclaration[];
+}
+
+interface StatementContext {
+  readonly srcContext: SourceFileContext;
   readonly statement: ts.Statement;
   readonly prefix: ts.Statement[];
 }

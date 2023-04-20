@@ -1,7 +1,4 @@
 {
-  "extends": "@run-z/project-config/tsconfig.lib.json",
-  "compilerOptions": {
-    "outDir": "target/js"
-  },
+  "extends": "./tsconfig.json",
   "include": ["src/spec/*.ts"]
 }
