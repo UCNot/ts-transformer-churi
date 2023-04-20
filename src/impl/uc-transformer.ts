@@ -45,6 +45,7 @@ export class UcTransformer {
     const stContext: StatementContext = {
       context,
       statement,
+      prefix: [],
     };
 
     const result = ts.visitEachChild(
@@ -52,9 +53,8 @@ export class UcTransformer {
       node => this.#transformExpression(node, stContext),
       context,
     );
-    const { prefix } = stContext;
 
-    return prefix ? [...prefix, result] : result;
+    return [...stContext.prefix, result];
   }
 
   #transformExpression(node: ts.Node, context: StatementContext): ts.Node {
@@ -109,6 +109,10 @@ export class UcTransformer {
   #call(node: ts.CallExpression, context: StatementContext): ts.Node | undefined {
     if (!this.#churiExports) {
       // No imports from `churi` yet.
+      return;
+    }
+    if (!node.arguments.length) {
+      // Model argument required.
       return;
     }
 
@@ -168,7 +172,7 @@ export class UcTransformer {
       ),
     );
 
-    context.prefix = [modelDecl];
+    context.prefix.push(modelDecl);
 
     return factory.updateCallExpression(node, node.expression, node.typeArguments, [modelId]);
   }
@@ -185,5 +189,5 @@ interface ChuriExports {
 interface StatementContext {
   readonly context: ts.TransformationContext;
   readonly statement: ts.Statement;
-  prefix?: ts.Statement[];
+  readonly prefix: ts.Statement[];
 }
