@@ -27,6 +27,9 @@
     "churi": "^0.6.0",
     "typescript": "5.0.4 - 5.1.0"
   },
+  "dependencies": {
+    "@run-z/npk": "^0.1.0"
+  },
   "devDependencies": {
     "@jest/globals": "^29.5.0",
     "@run-z/eslint-config": "^3.3.1",

@@ -1,16 +1,10 @@
+import { PackageInfo } from '@run-z/npk';
 import path from 'node:path';
-import { PackageJson } from './package.json.js';
 
 export function guessDistFile(): string {
-  const {
-    raw: { type },
-    mainEntry,
-  } = PackageJson.load();
+  const { type, mainEntryPoint: mainEntryPoint } = loadPackageInfo();
 
-  const indexFile =
-    mainEntry
-    && (mainEntry.findConditional(type === 'module' ? 'import' : 'require')
-      || mainEntry.findConditional());
+  const indexFile = mainEntryPoint?.findJs(type);
   let indexName: string;
 
   if (indexFile) {
@@ -20,4 +14,10 @@ export function guessDistFile(): string {
   }
 
   return indexName + (type === 'module' ? '.uc-lib.js' : '.uc-lib.mjs');
+}
+
+let packageInfo: PackageInfo | undefined;
+
+export function loadPackageInfo(): PackageInfo {
+  return (packageInfo ??= PackageInfo.loadSync());
 }
