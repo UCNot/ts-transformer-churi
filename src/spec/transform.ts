@@ -1,18 +1,15 @@
 import path from 'node:path';
 import ts from 'typescript';
+import { UctVfs, createUctVfs, wrapUctCompilerHost } from '../impl/uct-compiler-host.js';
 import { UcTransformer } from '../impl/uc-transformer.js';
 
 export function transform(
-  fileName: string,
+  vfsFiles: UctVfs,
   createUcTransformer: (program: ts.Program) => UcTransformer = program => new UcTransformer(program),
 ): string {
-  const filePath = path.resolve('src', 'spec', 'tests', fileName);
-  const program = createProgram(filePath);
-  const sourceFile = program.getSourceFile(filePath);
-
-  if (!sourceFile) {
-    throw new ReferenceError(`No such file: ${filePath}`);
-  }
+  const testDir = path.resolve('src', 'spec', 'tests');
+  const testFile = path.resolve(testDir, Object.keys(vfsFiles)[0]);
+  const program = createProgram(vfsFiles, testDir);
 
   const ucTransformer = createUcTransformer(program);
   let output!: string;
@@ -20,7 +17,7 @@ export function transform(
   const { diagnostics } = program.emit(
     undefined /* all files */,
     (fileName, text, _writeByteOrderMark, _onError, sourceFiles) => {
-      if (fileName.endsWith('.js') && sourceFiles?.find(({ fileName }) => fileName === filePath)) {
+      if (fileName.endsWith('.js') && sourceFiles?.find(({ fileName }) => fileName === testFile)) {
         output = text;
       }
     },
@@ -48,17 +45,19 @@ const FORMAT_HOST: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: ts.sys.useCaseSensitiveFileNames ? f => f : f => f.toLowerCase(),
 };
 
-function createProgram(...additionalFiles: string[]): ts.Program {
-  const { options, fileNames } = loadCompilerConfig(...additionalFiles);
+function createProgram(vfsFiles: UctVfs, dir?: string): ts.Program {
+  const { options } = loadCompilerConfig();
+  const host = ts.createCompilerHost(options, true);
+  const vfs = createUctVfs(host, vfsFiles, dir);
 
   return ts.createProgram({
-    rootNames: fileNames,
+    rootNames: [Object.keys(vfs)[0]],
     options,
-    host: ts.createCompilerHost(options, true),
+    host: wrapUctCompilerHost(host, vfs),
   });
 }
 
-function loadCompilerConfig(...additionalFiles: string[]): {
+function loadCompilerConfig(): {
   options: ts.CompilerOptions;
   fileNames: string[];
 } {
@@ -96,5 +95,5 @@ function loadCompilerConfig(...additionalFiles: string[]): {
     throw new Error(`Failed to parse ${tsconfig}`);
   }
 
-  return { options, fileNames: [...fileNames, ...additionalFiles] };
+  return { options, fileNames };
 }

@@ -1,9 +1,9 @@
-export interface UcCompilerTasks {
+export interface UctCompilerTasks {
   compileUcDeserializer(): void;
   compileUcSerializer(): void;
 }
 
-export class UcCompiler implements UcCompilerTasks {
+export class UctCompiler implements UctCompilerTasks {
 
   compileUcDeserializer(): void {
     // noop

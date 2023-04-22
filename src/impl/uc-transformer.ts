@@ -1,21 +1,21 @@
 import path from 'node:path';
 import ts from 'typescript';
 import { UcTransformerOptions } from '../uc-transformer-options.js';
-import { guessDistFile } from './guess-dist-file.js';
-import { UcCompiler, UcCompilerTasks } from './uc-compiler.js';
+import { guessUctDistFile } from './guess-uct-dist-file.js';
+import { UctCompiler, UctCompilerTasks } from './uct-compiler.js';
 
 export class UcTransformer {
 
   readonly #typeChecker: ts.TypeChecker;
-  readonly #tasks: UcCompilerTasks;
+  readonly #tasks: UctCompilerTasks;
   readonly #reservedIds = new Set<string>();
   #churiExports?: ChuriExports;
   #distFile: string;
 
   constructor(
     program: ts.Program,
-    tasks: UcCompilerTasks = new UcCompiler(),
-    { distFile = guessDistFile() }: UcTransformerOptions = {},
+    tasks: UctCompilerTasks = new UctCompiler(),
+    { distFile = guessUctDistFile() }: UcTransformerOptions = {},
   ) {
     this.#typeChecker = program.getTypeChecker();
     this.#tasks = tasks;
@@ -99,6 +99,10 @@ export class UcTransformer {
   }
 
   #importOrExport(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
+    if (this.#churiExports) {
+      return; // No need to inspect further.
+    }
+
     const { moduleSpecifier } = node;
 
     if (this.#isChuriSpecifier(moduleSpecifier)) {
@@ -113,10 +117,6 @@ export class UcTransformer {
   }
 
   #referChuri(node: ts.Expression | ts.ExportSpecifier): void {
-    if (this.#churiExports) {
-      return;
-    }
-
     const moduleSymbol = this.#typeChecker.getSymbolAtLocation(node)!;
 
     this.#churiExports = {

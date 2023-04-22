@@ -1,7 +1,7 @@
 import { PackageInfo } from '@run-z/npk';
 import path from 'node:path';
 
-export function guessDistFile(): string {
+export function guessUctDistFile(): string {
   const { type, mainEntryPoint: mainEntryPoint } = loadPackageInfo();
 
   const indexFile = mainEntryPoint?.findJs(type);
