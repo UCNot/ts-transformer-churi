@@ -61,7 +61,7 @@ function loadCompilerConfig(): {
   options: ts.CompilerOptions;
   fileNames: string[];
 } {
-  const tsconfig = 'tsconfig.spec.json';
+  const tsconfig = 'tsconfig.json';
   const cwd = ts.sys.getCurrentDirectory();
   const configPath = ts.findConfigFile(cwd, ts.sys.fileExists, tsconfig)!;
 
