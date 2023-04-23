@@ -18,7 +18,7 @@ describe('UcTransformer', () => {
   });
 
   it('discovers serializer', () => {
-    transform(
+    const sourceText = transform(
       {
         'create-serializer.ts': `
 import { createUcSerializer } from 'churi';
@@ -30,9 +30,10 @@ export const writeNumber = createUcSerializer(Number);
     );
 
     expect(tasks.compileUcSerializer).toHaveBeenCalledTimes(1);
+    expect(sourceText).toContain('.ucs-lib.js');
   });
   it('discovers serializer via imports', () => {
-    transform(
+    const sourceText = transform(
       {
         'create-serializer-via-import.ts': `
 import { createSerializer } from './test-imports.js';
@@ -47,9 +48,10 @@ export { createUcSerializer as createSerializer } from 'churi';
     );
 
     expect(tasks.compileUcSerializer).toHaveBeenCalledTimes(1);
+    expect(sourceText).toContain('.ucs-lib.js');
   });
   it('discovers deserializer via alias', () => {
-    transform(
+    const sourceText = transform(
       {
         'create-deserializer-via-alias.ts': `
 import { createUcDeserializer as createDeserializer } from 'churi';
@@ -61,5 +63,6 @@ export const readNumber = createDeserializer(Number);
     );
 
     expect(tasks.compileUcDeserializer).toHaveBeenCalledTimes(1);
+    expect(sourceText).toContain('.ucd-lib.js');
   });
 });

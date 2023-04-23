@@ -3,9 +3,26 @@
  */
 export interface UcTransformerOptions {
   /**
-   * Path to distribution file relative to current working directory.
-   *
-   * If not specified, then will be guessed based on package main file.
+   * Distribution files.
    */
-  readonly distFile?: string | undefined;
+  readonly dist?: UcTransformerDistributive | undefined;
+}
+
+/**
+ * Distribution files emitted by ChURI transformer.
+ */
+export interface UcTransformerDistributive {
+  /**
+   * Path to distribution file containing deserializers relative to current working directory.
+   *
+   * If unspecified, will be guessed based on package main file.
+   */
+  readonly deserializer?: string | undefined;
+
+  /**
+   * Path to distribution file containing serializers relative to current working directory.
+   *
+   * If unspecified, will be guessed based on package main file.
+   */
+  readonly serializer?: string | undefined;
 }

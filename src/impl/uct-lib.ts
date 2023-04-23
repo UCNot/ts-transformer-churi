@@ -2,19 +2,24 @@ import { isPresent } from '@proc7ts/primitives';
 import { UccCode, UccLib, UccSource } from 'churi/compiler';
 import path from 'node:path';
 import ts from 'typescript';
+import { UcTransformerDistributive } from '../uc-transformer-options.js';
+import { jsStringLiteral } from './js.js';
 import { UctSetup } from './uct-setup.js';
 import { UctCompileFn, UctTasks } from './uct-tasks.js';
 
 export class UctLib extends UccLib implements UctTasks {
 
+  readonly #dist: Required<UcTransformerDistributive>;
   readonly #tasks: (() => void)[] = [];
   #rootDir?: string;
 
   #ucdModels?: UccCode;
   #ucsModels?: UccCode;
 
-  constructor(_setup: UctSetup) {
+  constructor(setup: UctSetup) {
     super();
+
+    this.#dist = setup.dist;
   }
 
   compileUcDeserializer(task: UctCompileFn): void {
@@ -126,6 +131,7 @@ export class UctLib extends UccLib implements UctTasks {
           .write(`async () => await ${writeFile}(`)
           .indent(code => {
             code
+              .write(jsStringLiteral(this.#dist.deserializer) + ',')
               .write(`await new ${UcdLib}({`)
               .indent(ucdModels)
               .write('}).compileModule().toText(),', '');
@@ -149,6 +155,7 @@ export class UctLib extends UccLib implements UctTasks {
           .write(`async () => await ${writeFile}(`)
           .indent(code => {
             code
+              .write(jsStringLiteral(this.#dist.serializer) + ',')
               .write(`await new ${UcsLib}({`)
               .indent(ucsModels)
               .write('}).compileModule().toText(),', '');

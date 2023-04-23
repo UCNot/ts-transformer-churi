@@ -49,6 +49,8 @@ const readValue = createUcDeserializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './deserializer.js';`);
+      expect(sourceText).toContain(`.ucd-lib.js`);
+      expect(sourceText).not.toContain(`.ucs-lib.js`);
       expect(sourceText).toContain(`await compileDeserializers();`);
       expect(sourceText).not.toContain(`compileSerializers`);
     });
@@ -68,6 +70,8 @@ const writeValue = createUcSerializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './serializer.js';`);
+      expect(sourceText).toContain(`.ucs-lib.js`);
+      expect(sourceText).not.toContain(`.ucd-lib.js`);
       expect(sourceText).toContain(`await compileSerializers();`);
       expect(sourceText).not.toContain(`compileDeserializers`);
     });
@@ -88,6 +92,8 @@ const writeValue = createUcSerializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './model.js';`);
+      expect(sourceText).toContain(`.ucd-lib.js`);
+      expect(sourceText).toContain(`.ucs-lib.js`);
       expect(sourceText).toContain(`compileDeserializers(),`);
       expect(sourceText).toContain(`compileSerializers(),`);
     });

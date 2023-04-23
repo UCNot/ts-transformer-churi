@@ -1,5 +1,6 @@
 import path from 'node:path';
 import ts from 'typescript';
+import { UcTransformerDistributive } from '../uc-transformer-options.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
@@ -7,17 +8,17 @@ import { UctTasks } from './uct-tasks.js';
 export class UcTransformer {
 
   readonly #typeChecker: ts.TypeChecker;
-  readonly #distFile: string;
+  readonly #dist: Required<UcTransformerDistributive>;
   #tasks: UctTasks;
 
   readonly #reservedIds = new Set<string>();
   #churiExports?: ChuriExports;
 
   constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
-    const { program, distFile } = setup;
+    const { program, dist } = setup;
 
     this.#typeChecker = program.getTypeChecker();
-    this.#distFile = distFile;
+    this.#dist = dist;
     this.#tasks = tasks;
   }
 
@@ -162,7 +163,12 @@ export class UcTransformer {
   }
 
   #createDeserializer(node: ts.CallExpression, context: StatementContext): ts.Node {
-    const { replacement, fnId, modelId } = this.#extractModel(node, context, 'readValue');
+    const { replacement, fnId, modelId } = this.#extractModel(
+      node,
+      context,
+      this.#dist.deserializer,
+      'readValue',
+    );
 
     this.#tasks.compileUcDeserializer({
       fnId,
@@ -174,7 +180,12 @@ export class UcTransformer {
   }
 
   #createSerializer(node: ts.CallExpression, context: StatementContext): ts.Node {
-    const { replacement, fnId, modelId } = this.#extractModel(node, context, 'writeValue');
+    const { replacement, fnId, modelId } = this.#extractModel(
+      node,
+      context,
+      this.#dist.serializer,
+      'writeValue',
+    );
 
     this.#tasks.compileUcSerializer({
       fnId,
@@ -188,6 +199,7 @@ export class UcTransformer {
   #extractModel(
     node: ts.CallExpression,
     context: StatementContext,
+    distFile: string,
     suffix: string,
   ): {
     readonly replacement: ts.Node;
@@ -223,9 +235,7 @@ export class UcTransformer {
             factory.createImportSpecifier(false, factory.createIdentifier(fnId), fnAlias),
           ]),
         ),
-        factory.createStringLiteral(
-          path.relative(path.dirname(sourceFile.fileName), this.#distFile),
-        ),
+        factory.createStringLiteral(path.relative(path.dirname(sourceFile.fileName), distFile)),
       ),
     );
 

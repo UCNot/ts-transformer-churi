@@ -1,29 +1,43 @@
 import { PackageInfo } from '@run-z/npk';
 import path from 'node:path';
 import ts from 'typescript';
-import { UcTransformerOptions } from '../uc-transformer-options.js';
+import { UcTransformerDistributive, UcTransformerOptions } from '../uc-transformer-options.js';
 
-export class UctSetup {
+export class UctSetup implements UcTransformerOptions {
 
   readonly #program: ts.Program;
-  readonly #distFile: string;
+  readonly #dist: Required<UcTransformerDistributive>;
 
-  constructor(program: ts.Program, { distFile = guessUctDistFile() }: UcTransformerOptions = {}) {
+  constructor(
+    program: ts.Program,
+    { dist: { deserializer, serializer } = {} }: UcTransformerOptions = {},
+  ) {
     this.#program = program;
-    this.#distFile = distFile;
+
+    if (!deserializer || !serializer) {
+      const guessed = guessUctDist();
+
+      deserializer ??= guessed.deserializer;
+      serializer ??= guessed.serializer;
+    }
+
+    this.#dist = {
+      deserializer,
+      serializer,
+    };
   }
 
   get program(): ts.Program {
     return this.#program;
   }
 
-  get distFile(): string {
-    return this.#distFile;
+  get dist(): Required<UcTransformerDistributive> {
+    return this.#dist;
   }
 
 }
 
-function guessUctDistFile(): string {
+function guessUctDist(): Required<UcTransformerDistributive> {
   const { type, mainEntryPoint } = loadPackageInfo();
 
   const indexFile = mainEntryPoint?.findJs(type);
@@ -35,7 +49,12 @@ function guessUctDistFile(): string {
     indexName = './index';
   }
 
-  return indexName + (type === 'module' ? '.uc-lib.js' : '.uc-lib.mjs');
+  const ext = type === 'module' ? 'js' : 'mjs';
+
+  return {
+    deserializer: `${indexName}.ucd-lib.${ext}`,
+    serializer: `${indexName}.ucs-lib.${ext}`,
+  };
 }
 
 let packageInfo: PackageInfo | undefined;
