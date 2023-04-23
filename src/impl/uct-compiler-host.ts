@@ -1,9 +1,5 @@
-import path from 'node:path';
 import ts from 'typescript';
-
-export interface UctVfs {
-  readonly [path: string]: string;
-}
+import { UctVfs, createUctVfs } from './uct-vfs.js';
 
 export function createUctCompilerHost(
   options: ts.CompilerOptions,
@@ -13,18 +9,6 @@ export function createUctCompilerHost(
   const host = ts.createCompilerHost(options, true);
 
   return wrapUctCompilerHost(host, createUctVfs(host, vfsFiles, dir));
-}
-
-export function createUctVfs(host: ts.CompilerHost, vfsFiles: UctVfs, dir?: string): UctVfs {
-  const cwd = host.getCurrentDirectory();
-  const rootDir = dir ? path.resolve(cwd, dir) : cwd;
-
-  return Object.fromEntries(
-    Object.entries(vfsFiles).map(([filePath, content]) => [
-      ts.sys.resolvePath(path.resolve(rootDir, filePath)),
-      content,
-    ]),
-  );
 }
 
 export function wrapUctCompilerHost(host: ts.CompilerHost, vfs: UctVfs = {}): ts.CompilerHost {

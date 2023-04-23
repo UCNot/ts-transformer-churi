@@ -1,25 +1,24 @@
 import path from 'node:path';
 import ts from 'typescript';
-import { UcTransformerOptions } from '../uc-transformer-options.js';
-import { guessUctDistFile } from './guess-uct-dist-file.js';
-import { UctCompiler, UctCompilerTasks } from './uct-compiler.js';
+import { UctLib } from './uct-lib.js';
+import { UctSetup } from './uct-setup.js';
+import { UctTasks } from './uct-tasks.js';
 
 export class UcTransformer {
 
   readonly #typeChecker: ts.TypeChecker;
-  readonly #tasks: UctCompilerTasks;
+  readonly #distFile: string;
+  #tasks: UctTasks;
+
   readonly #reservedIds = new Set<string>();
   #churiExports?: ChuriExports;
-  #distFile: string;
 
-  constructor(
-    program: ts.Program,
-    tasks: UctCompilerTasks = new UctCompiler(),
-    { distFile = guessUctDistFile() }: UcTransformerOptions = {},
-  ) {
+  constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
+    const { program, distFile } = setup;
+
     this.#typeChecker = program.getTypeChecker();
-    this.#tasks = tasks;
     this.#distFile = distFile;
+    this.#tasks = tasks;
   }
 
   createTransformerFactory(): ts.TransformerFactory<ts.SourceFile> {
@@ -163,18 +162,38 @@ export class UcTransformer {
   }
 
   #createDeserializer(node: ts.CallExpression, context: StatementContext): ts.Node {
-    this.#tasks.compileUcDeserializer();
+    const { replacement, fnId, modelId } = this.#extractModel(node, context, 'readValue');
 
-    return this.#extractModel(node, context, 'readValue');
+    this.#tasks.compileUcDeserializer({
+      fnId,
+      modelId,
+      from: context.srcContext.sourceFile,
+    });
+
+    return replacement;
   }
 
   #createSerializer(node: ts.CallExpression, context: StatementContext): ts.Node {
-    this.#tasks.compileUcSerializer();
+    const { replacement, fnId, modelId } = this.#extractModel(node, context, 'writeValue');
 
-    return this.#extractModel(node, context, 'writeValue');
+    this.#tasks.compileUcSerializer({
+      fnId,
+      modelId,
+      from: context.srcContext.sourceFile,
+    });
+
+    return replacement;
   }
 
-  #extractModel(node: ts.CallExpression, context: StatementContext, suffix: string): ts.Node {
+  #extractModel(
+    node: ts.CallExpression,
+    context: StatementContext,
+    suffix: string,
+  ): {
+    readonly replacement: ts.Node;
+    readonly fnId: string;
+    readonly modelId: string;
+  } {
     const { srcContext } = context;
     const {
       sourceFile,
@@ -210,7 +229,7 @@ export class UcTransformer {
       ),
     );
 
-    return fnAlias;
+    return { replacement: fnAlias, fnId, modelId: modelId.text };
   }
 
   #createIds(

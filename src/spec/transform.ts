@@ -1,11 +1,12 @@
 import path from 'node:path';
 import ts from 'typescript';
-import { UctVfs, createUctVfs, wrapUctCompilerHost } from '../impl/uct-compiler-host.js';
 import { UcTransformer } from '../impl/uc-transformer.js';
+import { wrapUctCompilerHost } from '../impl/uct-compiler-host.js';
+import { UctVfs, createUctVfs } from '../impl/uct-vfs.js';
 
 export function transform(
   vfsFiles: UctVfs,
-  createUcTransformer: (program: ts.Program) => UcTransformer = program => new UcTransformer(program),
+  createUcTransformer: (program: ts.Program) => UcTransformer,
 ): string {
   const testDir = path.resolve('src', 'spec', 'tests');
   const testFile = path.resolve(testDir, Object.keys(vfsFiles)[0]);
