@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from '@jest/globals';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { transform } from '../spec/transform.js';
@@ -12,7 +13,13 @@ describe('UctLib', () => {
 
   beforeEach(() => {
     createUcTransformer = program => {
-      const setup = new UctSetup(program);
+      const setup = new UctSetup(program, {
+        dist: {
+          deserializer: 'target/test/test.ucd-lib.js',
+          serializer: 'target/test/test.ucs-lib.js',
+        },
+        tempDir: 'target/test',
+      });
 
       lib = new UctLib(setup);
 
@@ -39,7 +46,7 @@ console.debug('none');
           'deserializer.ts': `
 import { createUcDeserializer } from 'churi';
 
-const readValue = createUcDeserializer(String);
+export const readValue = createUcDeserializer(String);
         `,
         },
         createUcTransformer,
@@ -49,8 +56,8 @@ const readValue = createUcDeserializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './deserializer.js';`);
-      expect(sourceText).toContain(`.ucd-lib.js`);
-      expect(sourceText).not.toContain(`.ucs-lib.js`);
+      expect(sourceText).toContain(`test.ucd-lib.js`);
+      expect(sourceText).not.toContain(`test.ucs-lib.js`);
       expect(sourceText).toContain(`await compileDeserializers();`);
       expect(sourceText).not.toContain(`compileSerializers`);
     });
@@ -60,7 +67,7 @@ const readValue = createUcDeserializer(String);
           'serializer.ts': `
 import { createUcSerializer } from 'churi';
 
-const writeValue = createUcSerializer(String);
+export const writeValue = createUcSerializer(String);
         `,
         },
         createUcTransformer,
@@ -70,8 +77,8 @@ const writeValue = createUcSerializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './serializer.js';`);
-      expect(sourceText).toContain(`.ucs-lib.js`);
-      expect(sourceText).not.toContain(`.ucd-lib.js`);
+      expect(sourceText).toContain(`test.ucs-lib.js`);
+      expect(sourceText).not.toContain(`test.ucd-lib.js`);
       expect(sourceText).toContain(`await compileSerializers();`);
       expect(sourceText).not.toContain(`compileDeserializers`);
     });
@@ -81,8 +88,8 @@ const writeValue = createUcSerializer(String);
           'model.ts': `
 import { createUcDeserializer, createUcSerializer } from 'churi';
 
-const readValue = createUcDeserializer(String);
-const writeValue = createUcSerializer(String);
+export const readValue = createUcDeserializer(String);
+export const writeValue = createUcSerializer(String);
         `,
         },
         createUcTransformer,
@@ -92,8 +99,8 @@ const writeValue = createUcSerializer(String);
 
       expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
       expect(sourceText).toContain(` from './model.js';`);
-      expect(sourceText).toContain(`.ucd-lib.js`);
-      expect(sourceText).toContain(`.ucs-lib.js`);
+      expect(sourceText).toContain(`test.ucd-lib.js`);
+      expect(sourceText).toContain(`test.ucs-lib.js`);
       expect(sourceText).toContain(`compileDeserializers(),`);
       expect(sourceText).toContain(`compileSerializers(),`);
     });

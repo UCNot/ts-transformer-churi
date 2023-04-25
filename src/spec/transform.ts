@@ -1,5 +1,6 @@
 import path from 'node:path';
 import ts from 'typescript';
+import { reportErrors } from '../impl/report-errors.js';
 import { UcTransformer } from '../impl/uc-transformer.js';
 import { wrapUctCompilerHost } from '../impl/uct-compiler-host.js';
 import { UctVfs, createUctVfs } from '../impl/uct-vfs.js';
@@ -7,10 +8,14 @@ import { UctVfs, createUctVfs } from '../impl/uct-vfs.js';
 export function transform(
   vfsFiles: UctVfs,
   createUcTransformer: (program: ts.Program) => UcTransformer,
-): string {
+): { vfs: UctVfs; output: string } {
   const testDir = path.resolve('src', 'spec', 'tests');
   const testFile = path.resolve(testDir, Object.keys(vfsFiles)[0]);
-  const program = createProgram(vfsFiles, testDir);
+  const { program, vfs } = createProgram(vfsFiles, testDir);
+
+  if (reportErrors(FORMAT_HOST, ts.getPreEmitDiagnostics(program))) {
+    throw new Error('Failed to compile');
+  }
 
   const ucTransformer = createUcTransformer(program);
   let output!: string;
@@ -37,7 +42,7 @@ export function transform(
     throw new Error('Failed to compile');
   }
 
-  return output;
+  return { vfs, output };
 }
 
 const FORMAT_HOST: ts.FormatDiagnosticsHost = {
@@ -46,16 +51,19 @@ const FORMAT_HOST: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: ts.sys.useCaseSensitiveFileNames ? f => f : f => f.toLowerCase(),
 };
 
-function createProgram(vfsFiles: UctVfs, dir?: string): ts.Program {
+function createProgram(vfsFiles: UctVfs, dir?: string): { program: ts.Program; vfs: UctVfs } {
   const { options } = loadCompilerConfig();
   const host = ts.createCompilerHost(options, true);
   const vfs = createUctVfs(host, vfsFiles, dir);
 
-  return ts.createProgram({
-    rootNames: [Object.keys(vfs)[0]],
-    options,
-    host: wrapUctCompilerHost(host, vfs),
-  });
+  return {
+    program: ts.createProgram({
+      rootNames: [Object.keys(vfs)[0]],
+      options,
+      host: wrapUctCompilerHost(host, vfs),
+    }),
+    vfs,
+  };
 }
 
 function loadCompilerConfig(): {
@@ -74,9 +82,7 @@ function loadCompilerConfig(): {
     readonly error?: ts.Diagnostic;
   } = ts.readConfigFile(configPath, ts.sys.readFile);
 
-  if (error) {
-    console.error(ts.formatDiagnostic(error, FORMAT_HOST));
-
+  if (error && reportErrors(FORMAT_HOST, [error])) {
     throw new Error(`Failed to load ${tsconfig}`);
   }
 
@@ -88,11 +94,7 @@ function loadCompilerConfig(): {
     tsconfig,
   );
 
-  if (errors && errors.length) {
-    for (const error of errors) {
-      console.error(ts.formatDiagnostic(error, FORMAT_HOST));
-    }
-
+  if (reportErrors(FORMAT_HOST, errors)) {
     throw new Error(`Failed to parse ${tsconfig}`);
   }
 

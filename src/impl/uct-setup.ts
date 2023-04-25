@@ -1,16 +1,20 @@
 import { PackageInfo } from '@run-z/npk';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { UcTransformerDistributive, UcTransformerOptions } from '../uc-transformer-options.js';
+import { reportErrors } from './report-errors.js';
 
 export class UctSetup implements UcTransformerOptions {
 
   readonly #program: ts.Program;
   readonly #dist: Required<UcTransformerDistributive>;
+  readonly #tempDir: string | undefined;
+  readonly #formatHost: ts.FormatDiagnosticsHost;
 
   constructor(
     program: ts.Program,
-    { dist: { deserializer, serializer } = {} }: UcTransformerOptions = {},
+    { dist: { deserializer, serializer } = {}, tempDir }: UcTransformerOptions = {},
   ) {
     this.#program = program;
 
@@ -25,6 +29,14 @@ export class UctSetup implements UcTransformerOptions {
       deserializer,
       serializer,
     };
+
+    this.#tempDir = tempDir;
+
+    this.#formatHost = {
+      getCurrentDirectory: program.getCurrentDirectory.bind(program),
+      getNewLine: () => ts.sys.newLine,
+      getCanonicalFileName: ts.sys.useCaseSensitiveFileNames ? f => f : f => f.toLowerCase(),
+    };
   }
 
   get program(): ts.Program {
@@ -33,6 +45,26 @@ export class UctSetup implements UcTransformerOptions {
 
   get dist(): Required<UcTransformerDistributive> {
     return this.#dist;
+  }
+
+  get tempDir(): string | undefined {
+    return this.#tempDir;
+  }
+
+  async createTempDir(): Promise<string> {
+    let { outDir } = this.program.getCompilerOptions();
+
+    if (outDir) {
+      await fs.mkdir(outDir, { recursive: true });
+    } else {
+      outDir = 'node_modules';
+    }
+
+    return await fs.mkdtemp(path.join(outDir, 'uc-compiler-'));
+  }
+
+  reportErrors(diagnostics: readonly ts.Diagnostic[]): boolean {
+    return reportErrors(this.#formatHost, diagnostics);
   }
 
 }

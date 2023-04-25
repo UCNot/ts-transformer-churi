@@ -2,14 +2,15 @@ import { isPresent } from '@proc7ts/primitives';
 import { UccCode, UccLib, UccSource } from 'churi/compiler';
 import path from 'node:path';
 import ts from 'typescript';
-import { UcTransformerDistributive } from '../uc-transformer-options.js';
 import { jsStringLiteral } from './js.js';
+import { wrapUctCompilerHost } from './uct-compiler-host.js';
 import { UctSetup } from './uct-setup.js';
 import { UctCompileFn, UctTasks } from './uct-tasks.js';
+import { UctVfs } from './uct-vfs.js';
 
 export class UctLib extends UccLib implements UctTasks {
 
-  readonly #dist: Required<UcTransformerDistributive>;
+  readonly #setup: UctSetup;
   readonly #tasks: (() => void)[] = [];
   #rootDir?: string;
 
@@ -19,7 +20,7 @@ export class UctLib extends UccLib implements UctTasks {
   constructor(setup: UctSetup) {
     super();
 
-    this.#dist = setup.dist;
+    this.#setup = setup;
   }
 
   compileUcDeserializer(task: UctCompileFn): void {
@@ -89,7 +90,7 @@ export class UctLib extends UccLib implements UctTasks {
     }
 
     return {
-      fileName: path.join(this.#rootDir!, 'uc-lib.compiler.ts'),
+      fileName: path.join(this.#rootDir!, `${COMPILER_FILE_NAME}.ts`),
       sourceText: await new UccCode()
         .write(this.imports.asStatic(), '', this.declarations, '', code)
         .toText(),
@@ -131,7 +132,7 @@ export class UctLib extends UccLib implements UctTasks {
           .write(`async () => await ${writeFile}(`)
           .indent(code => {
             code
-              .write(jsStringLiteral(this.#dist.deserializer) + ',')
+              .write(jsStringLiteral(this.#setup.dist.deserializer) + ',')
               .write(`await new ${UcdLib}({`)
               .indent(ucdModels)
               .write('}).compileModule().toText(),', '');
@@ -155,7 +156,7 @@ export class UctLib extends UccLib implements UctTasks {
           .write(`async () => await ${writeFile}(`)
           .indent(code => {
             code
-              .write(jsStringLiteral(this.#dist.serializer) + ',')
+              .write(jsStringLiteral(this.#setup.dist.serializer) + ',')
               .write(`await new ${UcsLib}({`)
               .indent(ucsModels)
               .write('}).compileModule().toText(),', '');
@@ -164,7 +165,75 @@ export class UctLib extends UccLib implements UctTasks {
       }));
   }
 
+  async compile(vfs?: UctVfs): Promise<void> {
+    const source = await this.emitCompilerSource();
+
+    if (!source) {
+      return;
+    }
+
+    const tempDir = await this.#setup.createTempDir();
+
+    try {
+      const compiler = this.#emitCompiler(source, tempDir, vfs);
+
+      await import(compiler);
+    } finally {
+      // await fs.rm(tempDir, { recursive: true });
+    }
+  }
+
+  #emitCompiler(
+    { fileName, sourceText }: UctLib.CompilerSource,
+    outDir: string,
+    vfs?: UctVfs,
+  ): string {
+    const programOptions = this.#setup.program.getCompilerOptions();
+    const options: ts.CompilerOptions = {
+      ...programOptions,
+      declaration: false,
+      emitDeclarationOnly: false,
+      module: ts.ModuleKind.ES2022,
+      noEmit: false,
+      sourceMap: false,
+      target: ts.ScriptTarget.ES2022,
+      outDir,
+    };
+    const host = wrapUctCompilerHost(ts.createCompilerHost(options, true), {
+      ...vfs,
+      [fileName]: sourceText,
+    });
+
+    const program = ts.createProgram({
+      rootNames: [fileName],
+      options,
+      host,
+    });
+
+    if (this.#setup.reportErrors(ts.getPreEmitDiagnostics(program))) {
+      throw new Error(`Failed to emit schema compiler`);
+    }
+
+    const { diagnostics, emittedFiles = [] } = program.emit();
+
+    if (this.#setup.reportErrors(diagnostics)) {
+      throw new Error(`Failed to emit schema compiler`);
+    }
+
+    console.debug(emittedFiles);
+
+    const compilerFile = emittedFiles.find(file => path.parse(file).name === COMPILER_FILE_NAME);
+
+    if (!compilerFile) {
+      throw new Error(`Schema compiler not emitted`);
+    }
+
+    return compilerFile;
+  }
+
 }
+
+const COMPILER_FILE_NAME = 'uc-lib.compiler';
 
 export namespace UctLib {
   export interface CompilerSource {

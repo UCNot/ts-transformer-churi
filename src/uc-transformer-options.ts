@@ -6,6 +6,20 @@ export interface UcTransformerOptions {
    * Distribution files.
    */
   readonly dist?: UcTransformerDistributive | undefined;
+
+  /**
+   * Path to temporary directory.
+   *
+   * Generated schema compiler files will be placed there.
+   *
+   * Will be removed after schema compilation.
+   *
+   * By default, created inside [outDir] if one exists. Otherwise, a temporary directory will be created inside
+   * `node_modules`.
+   *
+   * [outDir]: https://www.typescriptlang.org/tsconfig#outDir
+   */
+  readonly tempDir?: string | undefined;
 }
 
 /**
