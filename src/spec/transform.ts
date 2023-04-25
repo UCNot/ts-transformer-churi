@@ -8,7 +8,7 @@ import { UctVfs, createUctVfs } from '../impl/uct-vfs.js';
 export function transform(
   vfsFiles: UctVfs,
   createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer,
-): { vfs: UctVfs; output: string } {
+): string {
   const testDir = path.resolve('src', 'spec', 'tests');
   const testFile = path.resolve(testDir, Object.keys(vfsFiles)[0]);
   const { program, vfs } = createProgram(vfsFiles, testDir);
@@ -42,7 +42,7 @@ export function transform(
     throw new Error('Failed to compile');
   }
 
-  return { vfs, output };
+  return output;
 }
 
 const FORMAT_HOST: ts.FormatDiagnosticsHost = {

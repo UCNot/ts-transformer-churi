@@ -20,7 +20,7 @@ describe('UcTransformer', () => {
   });
 
   it('discovers serializer', () => {
-    const { output } = transform(
+    const output = transform(
       {
         'create-serializer.ts': `
 import { createUcSerializer } from 'churi';
@@ -35,7 +35,7 @@ export const writeNumber = createUcSerializer(Number);
     expect(output).toContain('.ucs-lib.js');
   });
   it('discovers serializer via imports', () => {
-    const { output } = transform(
+    const output = transform(
       {
         'create-serializer-via-import.ts': `
 import { createSerializer } from './test-imports.js';
@@ -53,7 +53,7 @@ export { createUcSerializer as createSerializer } from 'churi';
     expect(output).toContain('.ucs-lib.js');
   });
   it('discovers deserializer via alias', () => {
-    const { output } = transform(
+    const output = transform(
       {
         'create-deserializer-via-alias.ts': `
 import { createUcDeserializer as createDeserializer } from 'churi';
