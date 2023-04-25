@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach } from 'node:test';
 import ts from 'typescript';
 import { transform } from '../spec/transform.js';
 import { UcTransformer } from './uc-transformer.js';
@@ -12,15 +11,17 @@ import { UctVfs } from './uct-vfs.js';
 describe('UctLib', () => {
   let lib: UctLib;
   let createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer;
+  let testDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    testDir = await fs.mkdtemp('target/test-');
     createUcTransformer = (program, vfs) => {
       const setup = new UctSetup(program, vfs, {
         dist: {
-          deserializer: 'target/test/test.ucd-lib.js',
-          serializer: 'target/test/test.ucs-lib.js',
+          deserializer: `${testDir}/test.ucd-lib.js`,
+          serializer: `${testDir}/test.ucs-lib.js`,
         },
-        tempDir: 'target/test',
+        tempDir: testDir,
       });
 
       lib = new UctLib(setup);
@@ -29,7 +30,7 @@ describe('UctLib', () => {
     };
   });
   afterEach(async () => {
-    await fs.rm('target/test', { recursive: true });
+    await fs.rm(testDir, { recursive: true });
   });
 
   describe('emitCompilerSource', () => {
@@ -126,7 +127,7 @@ export const readValue = createUcDeserializer(String);
 
       await lib.compile();
 
-      const file = await fs.readFile('target/test/test.ucd-lib.js', 'utf-8');
+      const file = await fs.readFile(`${testDir}/test.ucd-lib.js`, 'utf-8');
 
       expect(file).toContain('export function readValue(');
     });
@@ -144,7 +145,7 @@ export const writeValue = createUcSerializer(String);
 
       await lib.compile();
 
-      const file = await fs.readFile('target/test/test.ucs-lib.js', 'utf-8');
+      const file = await fs.readFile(`${testDir}/test.ucs-lib.js`, 'utf-8');
 
       expect(file).toContain('export async function writeValue(');
     });
