@@ -1,5 +1,6 @@
 import { isPresent } from '@proc7ts/primitives';
 import { UccCode, UccLib, UccSource } from 'churi/compiler';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { jsStringLiteral } from './js.js';
@@ -11,7 +12,9 @@ import { UctVfs } from './uct-vfs.js';
 export class UctLib extends UccLib implements UctTasks {
 
   readonly #setup: UctSetup;
+  readonly #printer: ts.Printer;
   readonly #tasks: (() => void)[] = [];
+  readonly #vfs: Record<string, string> = {};
   #rootDir?: string;
 
   #ucdModels?: UccCode;
@@ -21,24 +24,14 @@ export class UctLib extends UccLib implements UctTasks {
     super();
 
     this.#setup = setup;
+    this.#printer = ts.createPrinter(setup.program.getCompilerOptions());
   }
 
-  compileUcDeserializer(task: UctCompileFn): void {
-    this.#updateRootDir(task.from);
-    this.#tasks.push(() => this.#compileUcDeserializer(task));
-  }
+  replaceSourceFile(sourceFile: ts.SourceFile): void {
+    const text = this.#printer.printFile(sourceFile);
 
-  #compileUcDeserializer(task: UctCompileFn): void {
-    (this.#ucdModels ??= new UccCode()).write(this.#addModel(task));
-  }
-
-  compileUcSerializer(task: UctCompileFn): void {
-    this.#updateRootDir(task.from);
-    this.#tasks.push(() => this.#compileUcSerializer(task));
-  }
-
-  #compileUcSerializer(task: UctCompileFn): void {
-    (this.#ucsModels ??= new UccCode()).write(this.#addModel(task));
+    this.#vfs[sourceFile.fileName] = text;
+    this.#updateRootDir(sourceFile);
   }
 
   #updateRootDir({ fileName }: ts.SourceFile): void {
@@ -64,12 +57,28 @@ export class UctLib extends UccLib implements UctTasks {
     }
   }
 
-  #addModel({ fnId, modelId, from: { fileName } }: UctCompileFn): UccSource {
-    const moduleName = fileName.endsWith('ts')
-      ? fileName.slice(0, -2) + 'js'
-      : fileName.endsWith('tsx')
-      ? fileName.slice(0, -3) + '.js'
-      : fileName;
+  compileUcDeserializer(task: UctCompileFn): void {
+    this.#tasks.push(() => this.#compileUcDeserializer(task));
+  }
+
+  #compileUcDeserializer(task: UctCompileFn): void {
+    (this.#ucdModels ??= new UccCode()).write(this.#addModel(task));
+  }
+
+  compileUcSerializer(task: UctCompileFn): void {
+    this.#tasks.push(() => this.#compileUcSerializer(task));
+  }
+
+  #compileUcSerializer(task: UctCompileFn): void {
+    (this.#ucsModels ??= new UccCode()).write(this.#addModel(task));
+  }
+
+  #addModel({ fnId, modelId, from }: UctCompileFn): UccSource {
+    const moduleName = from.endsWith('ts')
+      ? from.slice(0, -2) + 'js'
+      : from.endsWith('tsx')
+      ? from.slice(0, -3) + '.js'
+      : from;
     const modulePath = path.relative(this.#rootDir!, moduleName);
     let moduleSpec = modulePath.replaceAll(path.sep, '/');
 
@@ -77,7 +86,7 @@ export class UctLib extends UccLib implements UctTasks {
       moduleSpec = './' + moduleSpec;
     }
 
-    const model = this.import(moduleSpec, modelId);
+    const model = this.import(moduleSpec, modelId.text);
 
     return `${fnId}: ${model},`;
   }
@@ -124,20 +133,28 @@ export class UctLib extends UccLib implements UctTasks {
       return;
     }
 
-    const writeFile = this.import('node:fs/promises', 'writeFile');
-    const UcdLib = this.import('churi/compiler', 'UcdLib');
-
     return this.declarations.declare('compileDeserializers', ({ init }) => init(code => {
+        const writeFile = this.import('node:fs/promises', 'writeFile');
+        const UcdSetup = this.import('churi/compiler', 'UcdSetup');
+
         code
-          .write(`async () => await ${writeFile}(`)
+          .write(`async () => {`)
           .indent(code => {
             code
-              .write(jsStringLiteral(this.#setup.dist.deserializer) + ',')
-              .write(`await new ${UcdLib}({`)
-              .indent(ucdModels)
-              .write('}).compileModule().toText(),', '');
+              .write(`const lib = await new ${UcdSetup}({`)
+              .indent(code => {
+                code.write(`models: {`).indent(ucdModels).write(`},`);
+              })
+              .write('}).bootstrap();')
+              .write(`await ${writeFile}(`)
+              .indent(code => {
+                code
+                  .write(jsStringLiteral(this.#setup.dist.deserializer) + ',')
+                  .write(`await lib.compileModule().toText(),`, '');
+              })
+              .write(');');
           })
-          .write(')');
+          .write('}');
       }));
   }
 
@@ -148,24 +165,32 @@ export class UctLib extends UccLib implements UctTasks {
       return;
     }
 
-    const writeFile = this.import('node:fs/promises', 'writeFile');
-    const UcsLib = this.import('churi/compiler', 'UcsLib');
-
     return this.declarations.declare('compileSerializers', ({ init }) => init(code => {
+        const writeFile = this.import('node:fs/promises', 'writeFile');
+        const UcsSetup = this.import('churi/compiler', 'UcsSetup');
+
         code
-          .write(`async () => await ${writeFile}(`)
+          .write(`async () => {`)
           .indent(code => {
             code
-              .write(jsStringLiteral(this.#setup.dist.serializer) + ',')
-              .write(`await new ${UcsLib}({`)
-              .indent(ucsModels)
-              .write('}).compileModule().toText(),', '');
+              .write(`const lib = await new ${UcsSetup}({`)
+              .indent(code => {
+                code.write(`models: {`).indent(ucsModels).write(`},`);
+              })
+              .write(`}).bootstrap();`)
+              .write(`await ${writeFile}(`)
+              .indent(code => {
+                code
+                  .write(jsStringLiteral(this.#setup.dist.serializer) + ',')
+                  .write(`await lib.compileModule().toText(),`, '');
+              })
+              .write(');');
           })
-          .write(')');
+          .write('}');
       }));
   }
 
-  async compile(vfs?: UctVfs): Promise<void> {
+  async compile(): Promise<void> {
     const source = await this.emitCompilerSource();
 
     if (!source) {
@@ -175,11 +200,11 @@ export class UctLib extends UccLib implements UctTasks {
     const tempDir = await this.#setup.createTempDir();
 
     try {
-      const compiler = this.#emitCompiler(source, tempDir, vfs);
+      const compiler = this.#emitCompiler(source, tempDir, { ...this.#setup.vfs, ...this.#vfs });
 
       await import(compiler);
     } finally {
-      // await fs.rm(tempDir, { recursive: true });
+      await fs.rm(tempDir, { recursive: true });
     }
   }
 
@@ -199,6 +224,7 @@ export class UctLib extends UccLib implements UctTasks {
       target: ts.ScriptTarget.ES2022,
       outDir,
     };
+
     const host = wrapUctCompilerHost(ts.createCompilerHost(options, true), {
       ...vfs,
       [fileName]: sourceText,
@@ -214,15 +240,20 @@ export class UctLib extends UccLib implements UctTasks {
       throw new Error(`Failed to emit schema compiler`);
     }
 
-    const { diagnostics, emittedFiles = [] } = program.emit();
+    let compilerFile: string | undefined;
+    const { diagnostics } = program.emit(
+      undefined,
+      (jsFileName, text, writeByteOrder, onError, sourceFiles, data) => {
+        host.writeFile(jsFileName, text, writeByteOrder, onError, sourceFiles, data);
+        if (sourceFiles?.some(src => src.fileName === fileName)) {
+          compilerFile = jsFileName;
+        }
+      },
+    );
 
     if (this.#setup.reportErrors(diagnostics)) {
       throw new Error(`Failed to emit schema compiler`);
     }
-
-    console.debug(emittedFiles);
-
-    const compilerFile = emittedFiles.find(file => path.parse(file).name === COMPILER_FILE_NAME);
 
     if (!compilerFile) {
       throw new Error(`Schema compiler not emitted`);

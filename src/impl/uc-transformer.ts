@@ -1,6 +1,7 @@
 import path from 'node:path';
 import ts from 'typescript';
 import { UcTransformerDistributive } from '../uc-transformer-options.js';
+import { TsNodeMapper } from './ts-node-mapper.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
@@ -31,21 +32,25 @@ export class UcTransformer {
     context: ts.TransformationContext,
   ): ts.SourceFile {
     const imports: ts.ImportDeclaration[] = [];
+    const mapper = new TsNodeMapper(sourceFile, context);
     const srcContext: SourceFileContext = {
       context,
       sourceFile,
       imports,
+      mapper,
     };
-
-    const result = ts.visitNode(sourceFile, node => this.#transform(node, srcContext)) as ts.SourceFile;
-
-    if (!imports.length) {
-      return result;
-    }
-
     const { factory } = context;
 
-    return factory.updateSourceFile(result, [...imports, ...result.statements]);
+    let result = ts.visitNode(sourceFile, node => this.#transform(node, srcContext)) as ts.SourceFile;
+
+    if (imports.length) {
+      result = factory.updateSourceFile(result, [...imports, ...result.statements]);
+    }
+    if (result !== sourceFile) {
+      this.#tasks.replaceSourceFile(mapper.updateAll());
+    }
+
+    return result;
   }
 
   #transform(node: ts.Node, srcContext: SourceFileContext): ts.Node | ts.Node[] {
@@ -66,11 +71,12 @@ export class UcTransformer {
     return ts.visitEachChild(node, node => this.#transform(node, srcContext), srcContext.context);
   }
 
-  #statement(statement: ts.Statement, srcContext: SourceFileContext): ts.Node | ts.Node[] {
+  #statement(statement: ts.Statement, srcContext: SourceFileContext): ts.Node {
+    const prefix: ts.Statement[] = [];
     const stContext: StatementContext = {
       srcContext,
       statement,
-      prefix: [],
+      prefix,
     };
 
     const result = ts.visitEachChild(
@@ -79,7 +85,13 @@ export class UcTransformer {
       srcContext.context,
     );
 
-    return [...stContext.prefix, result];
+    if (prefix.length) {
+      const { mapper } = srcContext;
+
+      mapper.addMapping(statement, () => [...prefix, mapper.updateNode(statement)]);
+    }
+
+    return result;
   }
 
   #transformExpression(node: ts.Node, context: StatementContext): ts.Node {
@@ -173,7 +185,7 @@ export class UcTransformer {
     this.#tasks.compileUcDeserializer({
       fnId,
       modelId,
-      from: context.srcContext.sourceFile,
+      from: context.srcContext.sourceFile.fileName,
     });
 
     return replacement;
@@ -190,7 +202,7 @@ export class UcTransformer {
     this.#tasks.compileUcSerializer({
       fnId,
       modelId,
-      from: context.srcContext.sourceFile,
+      from: context.srcContext.sourceFile.fileName,
     });
 
     return replacement;
@@ -204,12 +216,13 @@ export class UcTransformer {
   ): {
     readonly replacement: ts.Node;
     readonly fnId: string;
-    readonly modelId: string;
+    readonly modelId: ts.Identifier;
   } {
     const { srcContext } = context;
     const {
       sourceFile,
       context: { factory },
+      mapper,
     } = srcContext;
     const { modelId, fnId } = this.#createIds(node, context, suffix);
 
@@ -239,7 +252,12 @@ export class UcTransformer {
       ),
     );
 
-    return { replacement: fnAlias, fnId, modelId: modelId.text };
+    mapper.addMapping(node, () => factory.updateCallExpression(node, node.expression, node.typeArguments, [
+        modelId,
+        ...node.arguments.slice(1),
+      ]));
+
+    return { replacement: fnAlias, fnId, modelId };
   }
 
   #createIds(
@@ -256,13 +274,13 @@ export class UcTransformer {
 
       if (ts.isIdentifier(name)) {
         return {
-          modelId: factory.createUniqueName(name.text + UC_MODEL_SUFFIX),
+          modelId: factory.createIdentifier(name.text + UC_MODEL_SUFFIX),
           fnId: this.#reserveId(name.text),
         };
       }
     }
 
-    return { modelId: factory.createUniqueName(UC_MODEL_SUFFIX), fnId: this.#reserveId(suggested) };
+    return { modelId: factory.createIdentifier(UC_MODEL_SUFFIX), fnId: this.#reserveId(suggested) };
   }
 
   #reserveId(suggested: string): string {
@@ -296,6 +314,7 @@ interface SourceFileContext {
   readonly context: ts.TransformationContext;
   readonly sourceFile: ts.SourceFile;
   readonly imports: ts.ImportDeclaration[];
+  readonly mapper: TsNodeMapper;
 }
 
 interface StatementContext {

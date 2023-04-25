@@ -5,9 +5,8 @@ export interface UctVfs {
   readonly [path: string]: string;
 }
 
-export function createUctVfs(host: ts.CompilerHost, vfsFiles: UctVfs, dir?: string): UctVfs {
-  const cwd = host.getCurrentDirectory();
-  const rootDir = dir ? path.resolve(cwd, dir) : cwd;
+export function createUctVfs(dir: string, vfsFiles: UctVfs): UctVfs {
+  const rootDir = path.resolve(dir);
 
   return Object.fromEntries(
     Object.entries(vfsFiles).map(([filePath, content]) => [

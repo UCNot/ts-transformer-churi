@@ -24,7 +24,7 @@
     "default": "./dist/ts-transformer-churi.js"
   },
   "peerDependencies": {
-    "churi": "^0.6.0",
+    "churi": "^0.6.2",
     "typescript": "5.0.4 - 5.1.0"
   },
   "dependencies": {
@@ -41,7 +41,7 @@
     "@types/node": "^18.16.0",
     "@typescript-eslint/eslint-plugin": "^5.59.1",
     "@typescript-eslint/parser": "^5.59.1",
-    "churi": "^0.6.1",
+    "churi": "^0.6.2",
     "eslint": "^8.39.0",
     "eslint-plugin-jest": "^27.2.1",
     "gh-pages": "^5.0.0",

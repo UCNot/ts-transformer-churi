@@ -4,16 +4,19 @@ import path from 'node:path';
 import ts from 'typescript';
 import { UcTransformerDistributive, UcTransformerOptions } from '../uc-transformer-options.js';
 import { reportErrors } from './report-errors.js';
+import { UctVfs } from './uct-vfs.js';
 
 export class UctSetup implements UcTransformerOptions {
 
   readonly #program: ts.Program;
   readonly #dist: Required<UcTransformerDistributive>;
   readonly #tempDir: string | undefined;
+  readonly #vfs: UctVfs;
   readonly #formatHost: ts.FormatDiagnosticsHost;
 
   constructor(
     program: ts.Program,
+    vfs: UctVfs = {},
     { dist: { deserializer, serializer } = {}, tempDir }: UcTransformerOptions = {},
   ) {
     this.#program = program;
@@ -31,6 +34,7 @@ export class UctSetup implements UcTransformerOptions {
     };
 
     this.#tempDir = tempDir;
+    this.#vfs = vfs;
 
     this.#formatHost = {
       getCurrentDirectory: program.getCurrentDirectory.bind(program),
@@ -51,16 +55,21 @@ export class UctSetup implements UcTransformerOptions {
     return this.#tempDir;
   }
 
-  async createTempDir(): Promise<string> {
-    let { outDir } = this.program.getCompilerOptions();
+  get vfs(): UctVfs {
+    return this.#vfs;
+  }
 
-    if (outDir) {
-      await fs.mkdir(outDir, { recursive: true });
+  async createTempDir(): Promise<string> {
+    let { tempDir = this.program.getCompilerOptions().outDir } = this;
+
+    if (tempDir) {
+      tempDir = path.resolve(tempDir);
+      await fs.mkdir(tempDir, { recursive: true });
     } else {
-      outDir = 'node_modules';
+      tempDir = path.resolve('node_modules');
     }
 
-    return await fs.mkdtemp(path.join(outDir, 'uc-compiler-'));
+    return await fs.mkdtemp(path.join(tempDir, 'uc-compiler-'));
   }
 
   reportErrors(diagnostics: readonly ts.Diagnostic[]): boolean {

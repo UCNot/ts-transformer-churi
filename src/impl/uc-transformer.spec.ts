@@ -4,17 +4,19 @@ import { transform } from '../spec/transform.js';
 import { UcTransformer } from './uc-transformer.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
+import { UctVfs } from './uct-vfs.js';
 
 describe('UcTransformer', () => {
   let tasks: jest.Mocked<UctTasks>;
-  let createUcTransformer: (program: ts.Program) => UcTransformer;
+  let createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer;
 
   beforeEach(() => {
     tasks = {
+      replaceSourceFile: jest.fn(),
       compileUcDeserializer: jest.fn(),
       compileUcSerializer: jest.fn(),
     };
-    createUcTransformer = program => new UcTransformer(new UctSetup(program), tasks);
+    createUcTransformer = (program, vfs) => new UcTransformer(new UctSetup(program, vfs), tasks);
   });
 
   it('discovers serializer', () => {
