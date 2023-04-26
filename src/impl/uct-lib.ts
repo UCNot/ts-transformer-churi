@@ -1,9 +1,9 @@
 import { isPresent } from '@proc7ts/primitives';
 import { UccCode, UccLib, UccSource } from 'churi/compiler';
+import { jsStringLiteral } from 'httongue';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
-import { jsStringLiteral } from './js.js';
 import { wrapUctCompilerHost } from './uct-compiler-host.js';
 import { UctSetup } from './uct-setup.js';
 import { UctCompileFn, UctTasks } from './uct-tasks.js';
