@@ -13,9 +13,9 @@ See the [API documentation].
 [npm-url]: https://www.npmjs.com/package/ts-transformer-churi
 [build-status-img]: https://github.com/hatsyjs/ts-transformer-churi/workflows/Build/badge.svg
 [build-status-link]: https://github.com/hatsyjs/ts-transformer-churi/actions?query=workflow:Build
-[quality-img]: https://app.codacy.com/project/badge/Grade/6dd694badd554ca39c6a85f0ec2c55b4
-[quality-link]: https://www.codacy.com/gh/hatsyjs/ts-transformer-churi/dashboard?utm_source=github.com&utm_medium=referral&utm_content=hatsyjs/ts-transformer-churi&utm_campaign=Badge_Grade
-[coverage-img]: https://app.codacy.com/project/badge/Coverage/6dd694badd554ca39c6a85f0ec2c55b4
+[quality-img]: https://app.codacy.com/project/badge/Grade/8641bd8988254172b3208a4180163807
+[quality-link]: https://app.codacy.com/gh/hatsyjs/ts-transformer-churi/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade
+[coverage-img]: https://app.codacy.com/project/badge/Coverage/8641bd8988254172b3208a4180163807
 [coverage-link]: https://www.codacy.com/gh/hatsyjs/ts-transformer-churi/dashboard?utm_source=github.com&utm_medium=referral&utm_content=hatsyjs/ts-transformer-churi&utm_campaign=Badge_Coverage
 [github-image]: https://img.shields.io/static/v1?logo=github&label=GitHub&message=project&color=informational
 [github-url]: https://github.com/hatsyjs/ts-transformer-churi
