@@ -1,7 +1,7 @@
 {
   "name": "ts-transformer-churi",
   "version": "0.1.0",
-  "description": "Compile ChURI schemae along TypeScript code",
+  "description": "Compile ChURI models along TypeScript code",
   "keywords": [
     "charged-uri",
     "schema-compiler",
