@@ -1,5 +1,5 @@
 import { isPresent } from '@proc7ts/primitives';
-import { UccCode, UccLib, UccSource } from 'churi/compiler';
+import { UccCode, UccLib, UccSource } from 'churi/compiler.js';
 import { jsStringLiteral } from 'httongue';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -135,7 +135,7 @@ export class UctLib extends UccLib implements UctTasks {
 
     return this.declarations.declare('compileDeserializers', ({ init }) => init(code => {
         const writeFile = this.import('node:fs/promises', 'writeFile');
-        const UcdSetup = this.import('churi/compiler', 'UcdSetup');
+        const UcdSetup = this.import('churi/compiler.js', 'UcdSetup');
 
         code
           .write(`async () => {`)
@@ -167,7 +167,7 @@ export class UctLib extends UccLib implements UctTasks {
 
     return this.declarations.declare('compileSerializers', ({ init }) => init(code => {
         const writeFile = this.import('node:fs/promises', 'writeFile');
-        const UcsSetup = this.import('churi/compiler', 'UcsSetup');
+        const UcsSetup = this.import('churi/compiler.js', 'UcsSetup');
 
         code
           .write(`async () => {`)
