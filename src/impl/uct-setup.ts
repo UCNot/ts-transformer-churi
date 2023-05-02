@@ -2,14 +2,14 @@ import { PackageInfo } from '@run-z/npk';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
-import { UcTransformerDistributive, UcTransformerOptions } from '../uc-transformer-options.js';
+import { UcTransformerOptions } from '../uc-transformer-options.js';
 import { reportErrors } from './report-errors.js';
 import { UctVfs } from './uct-vfs.js';
 
 export class UctSetup implements UcTransformerOptions {
 
   readonly #program: ts.Program;
-  readonly #dist: Required<UcTransformerDistributive>;
+  readonly #dist: string;
   readonly #tempDir: string | undefined;
   readonly #vfs: UctVfs;
   readonly #formatHost: ts.FormatDiagnosticsHost;
@@ -17,22 +17,10 @@ export class UctSetup implements UcTransformerOptions {
   constructor(
     program: ts.Program,
     vfs: UctVfs = {},
-    { dist: { deserializer, serializer } = {}, tempDir }: UcTransformerOptions = {},
+    { dist = guessUctDist(), tempDir }: UcTransformerOptions = {},
   ) {
     this.#program = program;
-
-    if (!deserializer || !serializer) {
-      const guessed = guessUctDist();
-
-      deserializer ??= guessed.deserializer;
-      serializer ??= guessed.serializer;
-    }
-
-    this.#dist = {
-      deserializer,
-      serializer,
-    };
-
+    this.#dist = dist;
     this.#tempDir = tempDir;
     this.#vfs = vfs;
 
@@ -47,7 +35,7 @@ export class UctSetup implements UcTransformerOptions {
     return this.#program;
   }
 
-  get dist(): Required<UcTransformerDistributive> {
+  get dist(): string {
     return this.#dist;
   }
 
@@ -78,7 +66,7 @@ export class UctSetup implements UcTransformerOptions {
 
 }
 
-function guessUctDist(): Required<UcTransformerDistributive> {
+function guessUctDist(): string {
   const { type, mainEntryPoint } = loadPackageInfo();
 
   const indexFile = mainEntryPoint?.findJs(type);
@@ -92,10 +80,7 @@ function guessUctDist(): Required<UcTransformerDistributive> {
 
   const ext = type === 'module' ? 'js' : 'mjs';
 
-  return {
-    deserializer: `${indexName}.ucd-lib.${ext}`,
-    serializer: `${indexName}.ucs-lib.${ext}`,
-  };
+  return `${indexName}.uc-lib.${ext}`;
 }
 
 let packageInfo: PackageInfo | undefined;

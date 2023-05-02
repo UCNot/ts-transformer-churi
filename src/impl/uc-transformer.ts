@@ -1,6 +1,5 @@
 import path from 'node:path';
 import ts from 'typescript';
-import { UcTransformerDistributive } from '../uc-transformer-options.js';
 import { TsNodeMapper } from './ts-node-mapper.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
@@ -9,7 +8,7 @@ import { UctTasks } from './uct-tasks.js';
 export class UcTransformer {
 
   readonly #typeChecker: ts.TypeChecker;
-  readonly #dist: Required<UcTransformerDistributive>;
+  readonly #dist: string;
   #tasks: UctTasks;
 
   readonly #reservedIds = new Set<string>();
@@ -178,7 +177,7 @@ export class UcTransformer {
     const { replacement, fnId, modelId } = this.#extractModel(
       node,
       context,
-      this.#dist.deserializer,
+      this.#dist,
       'readValue',
     );
 
@@ -195,7 +194,7 @@ export class UcTransformer {
     const { replacement, fnId, modelId } = this.#extractModel(
       node,
       context,
-      this.#dist.serializer,
+      this.#dist,
       'writeValue',
     );
 

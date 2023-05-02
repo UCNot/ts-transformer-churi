@@ -1,4 +1,3 @@
-import { isPresent } from '@proc7ts/primitives';
 import { UccCode, UccLib, UccSource } from 'churi/compiler.js';
 import { jsStringLiteral } from 'httongue';
 import fs from 'node:fs/promises';
@@ -91,116 +90,86 @@ export class UctLib extends UccLib implements UctTasks {
     return `${fnId}: ${model},`;
   }
 
-  async emitCompilerSource(): Promise<UctLib.CompilerSource | undefined> {
-    const code = this.#toCompilerCode();
-
-    if (!code) {
+  async emitBundler(): Promise<UctLib.Bundler | undefined> {
+    if (!this.#emitBundler()) {
       return;
     }
 
     return {
-      fileName: path.join(this.#rootDir!, `${COMPILER_FILE_NAME}.ts`),
-      sourceText: await new UccCode()
-        .write(this.imports.asStatic(), '', this.declarations, '', code)
-        .toText(),
+      fileName: path.join(this.#rootDir!, `${BUNDLER_FILE_NAME}.ts`),
+      sourceText: await this.bundle.compile().toText(),
     };
   }
 
-  #toCompilerCode(): UccSource | undefined {
+  #emitBundler(): boolean {
     this.#tasks.forEach(task => task());
 
-    const fns = [this.#compileDeserializers(), this.#compileSerializers()].filter(isPresent);
-
-    if (!fns.length) {
-      return;
-    }
-    if (fns.length === 1) {
-      return `await ${fns[0]}();`;
-    }
-
-    return code => {
-      code
-        .write(`await Promise.all[`)
-        .indent(...fns.map(fn => `${fn}(),`))
-        .write(']);');
-    };
-  }
-
-  #compileDeserializers(): string | undefined {
     const ucdModels = this.#ucdModels;
-
-    if (!ucdModels) {
-      return;
-    }
-
-    return this.declarations.declare('compileDeserializers', ({ init }) => init(code => {
-        const writeFile = this.import('node:fs/promises', 'writeFile');
-        const UcdSetup = this.import('churi/compiler.js', 'UcdSetup');
-
-        code
-          .write(`async () => {`)
-          .indent(code => {
-            code
-              .write(`const lib = await new ${UcdSetup}({`)
-              .indent(code => {
-                code.write(`models: {`).indent(ucdModels).write(`},`);
-              })
-              .write('}).bootstrap();')
-              .write(`await ${writeFile}(`)
-              .indent(code => {
-                code
-                  .write(jsStringLiteral(this.#setup.dist.deserializer) + ',')
-                  .write(`await lib.compileModule().toText(),`, '');
-              })
-              .write(');');
-          })
-          .write('}');
-      }));
-  }
-
-  #compileSerializers(): string | undefined {
     const ucsModels = this.#ucsModels;
 
-    if (!ucsModels) {
-      return;
+    if (!ucdModels && !ucsModels) {
+      return false;
     }
 
-    return this.declarations.declare('compileSerializers', ({ init }) => init(code => {
-        const writeFile = this.import('node:fs/promises', 'writeFile');
-        const UcsSetup = this.import('churi/compiler.js', 'UcsSetup');
+    const emitBundle = this.declarations.declareFunction(
+      'emitBundle',
+      [],
+      ({ ns }) => code => {
+          const writeFile = this.import('node:fs/promises', 'writeFile');
+          const bundle = ns.name('bundle');
+          const UccBundle = this.import('churi/compiler.js', 'UccBundle');
 
-        code
-          .write(`async () => {`)
-          .indent(code => {
+          code.write(`const ${bundle} = new ${UccBundle};`);
+          if (ucdModels) {
+            const UcdSetup = this.import('churi/compiler.js', 'UcdSetup');
+
             code
-              .write(`const lib = await new ${UcsSetup}({`)
+              .write(`await new ${UcdSetup}({`)
               .indent(code => {
-                code.write(`models: {`).indent(ucsModels).write(`},`);
+                code.write(`bundle: ${bundle},`).write(`models: {`).indent(ucdModels).write(`},`);
               })
-              .write(`}).bootstrap();`)
-              .write(`await ${writeFile}(`)
+              .write('}).bootstrap();');
+          }
+          if (ucsModels) {
+            const UcsSetup = this.import('churi/compiler.js', 'UcsSetup');
+
+            code
+              .write(`await new ${UcsSetup}({`)
               .indent(code => {
-                code
-                  .write(jsStringLiteral(this.#setup.dist.serializer) + ',')
-                  .write(`await lib.compileModule().toText(),`, '');
+                code.write(`bundle: ${bundle},`).write(`models: {`).indent(ucsModels).write(`},`);
               })
-              .write(');');
-          })
-          .write('}');
-      }));
+              .write(`}).bootstrap();`);
+          }
+          code
+            .write(`await ${writeFile}(`)
+            .indent(code => {
+              code
+                .write(jsStringLiteral(this.#setup.dist) + ',')
+                .write(`await ${bundle}.compile().toText(),`, '');
+            })
+            .write(');');
+        },
+      {
+        async: true,
+      },
+    );
+
+    this.bundle.body.write(`await ${emitBundle}();`);
+
+    return true;
   }
 
   async compile(): Promise<void> {
-    const source = await this.emitCompilerSource();
+    const bundler = await this.emitBundler();
 
-    if (!source) {
+    if (!bundler) {
       return;
     }
 
     const tempDir = await this.#setup.createTempDir();
 
     try {
-      const compiler = this.#emitCompiler(source, tempDir, { ...this.#setup.vfs, ...this.#vfs });
+      const compiler = this.#emitCompiler(bundler, tempDir, { ...this.#setup.vfs, ...this.#vfs });
 
       await import(compiler);
     } finally {
@@ -208,11 +177,7 @@ export class UctLib extends UccLib implements UctTasks {
     }
   }
 
-  #emitCompiler(
-    { fileName, sourceText }: UctLib.CompilerSource,
-    outDir: string,
-    vfs?: UctVfs,
-  ): string {
+  #emitCompiler({ fileName, sourceText }: UctLib.Bundler, outDir: string, vfs?: UctVfs): string {
     const programOptions = this.#setup.program.getCompilerOptions();
     const options: ts.CompilerOptions = {
       ...programOptions,
@@ -264,10 +229,10 @@ export class UctLib extends UccLib implements UctTasks {
 
 }
 
-const COMPILER_FILE_NAME = 'uc-lib.compiler';
+const BUNDLER_FILE_NAME = 'uc-lib.bundler';
 
 export namespace UctLib {
-  export interface CompilerSource {
+  export interface Bundler {
     readonly fileName: string;
     readonly sourceText: string;
   }

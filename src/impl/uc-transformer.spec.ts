@@ -32,7 +32,7 @@ export const writeNumber = createUcSerializer(Number);
     );
 
     expect(tasks.compileUcSerializer).toHaveBeenCalledTimes(1);
-    expect(output).toContain('.ucs-lib.js');
+    expect(output).toContain('.uc-lib.js');
   });
   it('discovers serializer via imports', () => {
     const output = transform(
@@ -50,7 +50,7 @@ export { createUcSerializer as createSerializer } from 'churi';
     );
 
     expect(tasks.compileUcSerializer).toHaveBeenCalledTimes(1);
-    expect(output).toContain('.ucs-lib.js');
+    expect(output).toContain('.uc-lib.js');
   });
   it('discovers deserializer via alias', () => {
     const output = transform(
@@ -65,6 +65,6 @@ export const readNumber = createDeserializer(Number);
     );
 
     expect(tasks.compileUcDeserializer).toHaveBeenCalledTimes(1);
-    expect(output).toContain('.ucd-lib.js');
+    expect(output).toContain('.uc-lib.js');
   });
 });
