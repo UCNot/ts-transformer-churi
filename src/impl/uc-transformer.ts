@@ -1,3 +1,4 @@
+import { UccNamespace } from 'churi/compiler.js';
 import path from 'node:path';
 import ts from 'typescript';
 import { TsNodeMapper } from './ts-node-mapper.js';
@@ -11,7 +12,7 @@ export class UcTransformer {
   readonly #dist: string;
   #tasks: UctTasks;
 
-  readonly #reservedIds = new Set<string>();
+  readonly #ns = new UccNamespace();
   #churiExports?: ChuriExports;
 
   constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
@@ -274,30 +275,12 @@ export class UcTransformer {
       if (ts.isIdentifier(name)) {
         return {
           modelId: factory.createIdentifier(name.text + UC_MODEL_SUFFIX),
-          fnId: this.#reserveId(name.text),
+          fnId: this.#ns.name(name.text),
         };
       }
     }
 
-    return { modelId: factory.createIdentifier(UC_MODEL_SUFFIX), fnId: this.#reserveId(suggested) };
-  }
-
-  #reserveId(suggested: string): string {
-    if (!this.#reservedIds.has(suggested)) {
-      this.#reservedIds.add(suggested);
-
-      return suggested;
-    }
-
-    for (let i = 1; ; ++i) {
-      const id = `${suggested}$${i}`;
-
-      if (!this.#reservedIds.has(id)) {
-        this.#reservedIds.add(id);
-
-        return id;
-      }
-    }
+    return { modelId: factory.createIdentifier(UC_MODEL_SUFFIX), fnId: this.#ns.name(suggested) };
   }
 
 }
