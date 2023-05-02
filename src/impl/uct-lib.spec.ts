@@ -17,10 +17,7 @@ describe('UctLib', () => {
     testDir = await fs.mkdtemp('target/test-');
     createUcTransformer = (program, vfs) => {
       const setup = new UctSetup(program, vfs, {
-        dist: {
-          deserializer: `${testDir}/test.ucd-lib.js`,
-          serializer: `${testDir}/test.ucs-lib.js`,
-        },
+        dist: `${testDir}/test.uc-lib.js`,
         tempDir: testDir,
       });
 
@@ -33,7 +30,7 @@ describe('UctLib', () => {
     await fs.rm(testDir, { recursive: true });
   });
 
-  describe('emitCompilerSource', () => {
+  describe('emitBundler', () => {
     it('emits nothing by default', async () => {
       transform(
         {
@@ -44,9 +41,9 @@ console.debug('none');
         createUcTransformer,
       );
 
-      await expect(lib.emitCompilerSource()).resolves.toBeUndefined();
+      await expect(lib.emitBundler()).resolves.toBeUndefined();
     });
-    it('emits deserializer compilation', async () => {
+    it('emits deserializer bundler', async () => {
       transform(
         {
           'deserializer.ts': `
@@ -58,16 +55,14 @@ export const readValue = createUcDeserializer(String);
         createUcTransformer,
       );
 
-      const { fileName, sourceText } = (await lib.emitCompilerSource())!;
+      const { fileName, sourceText } = (await lib.emitBundler())!;
 
-      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
+      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.bundler.ts'));
       expect(sourceText).toContain(` from './deserializer.js';`);
-      expect(sourceText).toContain(`test.ucd-lib.js`);
-      expect(sourceText).not.toContain(`test.ucs-lib.js`);
-      expect(sourceText).toContain(`await compileDeserializers();`);
-      expect(sourceText).not.toContain(`compileSerializers`);
+      expect(sourceText).toContain(`test.uc-lib.js`);
+      expect(sourceText).toContain(`await emitBundle();`);
     });
-    it('emits serializer compilation', async () => {
+    it('emits serializer bundler', async () => {
       transform(
         {
           'serializer.ts': `
@@ -79,16 +74,14 @@ export const writeValue = createUcSerializer(String);
         createUcTransformer,
       );
 
-      const { fileName, sourceText } = (await lib.emitCompilerSource())!;
+      const { fileName, sourceText } = (await lib.emitBundler())!;
 
-      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
+      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.bundler.ts'));
       expect(sourceText).toContain(` from './serializer.js';`);
-      expect(sourceText).toContain(`test.ucs-lib.js`);
-      expect(sourceText).not.toContain(`test.ucd-lib.js`);
-      expect(sourceText).toContain(`await compileSerializers();`);
-      expect(sourceText).not.toContain(`compileDeserializers`);
+      expect(sourceText).toContain(`test.uc-lib.js`);
+      expect(sourceText).toContain(`await emitBundle();`);
     });
-    it('emits serializer and deserializer compilation', async () => {
+    it('emits serializer and deserializer bundler', async () => {
       transform(
         {
           'model.ts': `
@@ -101,14 +94,12 @@ export const writeValue = createUcSerializer(String);
         createUcTransformer,
       );
 
-      const { fileName, sourceText } = (await lib.emitCompilerSource())!;
+      const { fileName, sourceText } = (await lib.emitBundler())!;
 
-      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.compiler.ts'));
+      expect(fileName).toBe(path.resolve('src', 'spec', 'tests', 'uc-lib.bundler.ts'));
       expect(sourceText).toContain(` from './model.js';`);
-      expect(sourceText).toContain(`test.ucd-lib.js`);
-      expect(sourceText).toContain(`test.ucs-lib.js`);
-      expect(sourceText).toContain(`compileDeserializers(),`);
-      expect(sourceText).toContain(`compileSerializers(),`);
+      expect(sourceText).toContain(`test.uc-lib.js`);
+      expect(sourceText).toContain(`await emitBundle();`);
     });
   });
 
@@ -127,7 +118,7 @@ export const readValue = createUcDeserializer(String);
 
       await lib.compile();
 
-      const file = await fs.readFile(`${testDir}/test.ucd-lib.js`, 'utf-8');
+      const file = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
 
       expect(file).toContain('export function readValue(');
     });
@@ -145,8 +136,28 @@ export const writeValue = createUcSerializer(String);
 
       await lib.compile();
 
-      const file = await fs.readFile(`${testDir}/test.ucs-lib.js`, 'utf-8');
+      const file = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
 
+      expect(file).toContain('export async function writeValue(');
+    });
+    it('emits serializer and deserializer lib', async () => {
+      transform(
+        {
+          'model.ts': `
+import { createUcDeserializer, createUcSerializer } from 'churi';
+
+export const readValue = createUcDeserializer(String);
+export const writeValue = createUcSerializer(String);
+        `,
+        },
+        createUcTransformer,
+      );
+
+      await lib.compile();
+
+      const file = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
+
+      expect(file).toContain('export function readValue(');
       expect(file).toContain('export async function writeValue(');
     });
   });
