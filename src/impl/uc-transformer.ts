@@ -274,17 +274,21 @@ export class UcTransformer {
 
       if (ts.isIdentifier(name)) {
         return {
-          modelId: factory.createIdentifier(name.text + UC_MODEL_SUFFIX),
+          modelId: factory.createIdentifier(UC_MODEL_PREFIX + name.text + UC_MODEL_SUFFIX),
           fnId: this.#ns.name(name.text),
         };
       }
     }
 
-    return { modelId: factory.createIdentifier(UC_MODEL_SUFFIX), fnId: this.#ns.name(suggested) };
+    return {
+      modelId: factory.createIdentifier(UC_MODEL_PREFIX + UC_MODEL_SUFFIX),
+      fnId: this.#ns.name(suggested),
+    };
   }
 
 }
 
+const UC_MODEL_PREFIX = '\u2c1f';
 const UC_MODEL_SUFFIX = '$$uc$model';
 
 interface ChuriExports {
