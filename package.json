@@ -23,6 +23,7 @@
     "types": "./dist/ts-transformer-churi.d.ts",
     "default": "./dist/ts-transformer-churi.js"
   },
+  "sideEffects": false,
   "peerDependencies": {
     "churi": "^0.8.0",
     "typescript": "5.0.4 - 5.1.0"
