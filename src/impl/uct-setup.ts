@@ -1,5 +1,6 @@
-import { PackageInfo } from '@run-z/npk';
-import fs from 'node:fs/promises';
+import { PackageInfo, PackageJson } from '@run-z/npk';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { UcTransformerOptions } from '../uc-transformer-options.js';
@@ -52,12 +53,12 @@ export class UctSetup implements UcTransformerOptions {
 
     if (tempDir) {
       tempDir = path.resolve(tempDir);
-      await fs.mkdir(tempDir, { recursive: true });
+      await fsPromises.mkdir(tempDir, { recursive: true });
     } else {
       tempDir = path.resolve('node_modules');
     }
 
-    return await fs.mkdtemp(path.join(tempDir, 'uc-compiler-'));
+    return await fsPromises.mkdtemp(path.join(tempDir, 'uc-compiler-'));
   }
 
   reportErrors(diagnostics: readonly ts.Diagnostic[]): boolean {
@@ -86,5 +87,7 @@ function guessUctDist(): string {
 let packageInfo: PackageInfo | undefined;
 
 function loadPackageInfo(): PackageInfo {
-  return (packageInfo ??= PackageInfo.loadSync());
+  return (packageInfo ??= new PackageInfo(
+    JSON.parse(fs.readFileSync('package.json', 'utf-8')) as PackageJson,
+  ));
 }
