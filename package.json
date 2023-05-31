@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@proc7ts/primitives": "4.0.1",
-    "@run-z/npk": "^0.5.0",
+    "@run-z/npk": "^0.6.0",
     "httongue": "^3.1.0"
   },
   "devDependencies": {
