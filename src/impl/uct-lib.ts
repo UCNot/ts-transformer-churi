@@ -1,5 +1,15 @@
-import { UccCode, UccLib, UccSource } from 'churi/compiler.js';
-import { jsStringLiteral } from 'httongue';
+import {
+  EsCode,
+  EsFunction,
+  EsSignature,
+  EsSnippet,
+  EsSymbol,
+  EsVarSymbol,
+  esGenerate,
+  esImport,
+  esStringLiteral,
+  esline,
+} from 'esgen';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
@@ -8,7 +18,7 @@ import { UctSetup } from './uct-setup.js';
 import { UctCompileFn, UctTasks } from './uct-tasks.js';
 import { UctVfs } from './uct-vfs.js';
 
-export class UctLib extends UccLib implements UctTasks {
+export class UctLib implements UctTasks {
 
   readonly #setup: UctSetup;
   readonly #printer: ts.Printer;
@@ -16,12 +26,10 @@ export class UctLib extends UccLib implements UctTasks {
   readonly #vfs: Record<string, string> = {};
   #rootDir?: string;
 
-  #ucdModels?: UccCode;
-  #ucsModels?: UccCode;
+  #ucdModels?: EsCode;
+  #ucsModels?: EsCode;
 
   constructor(setup: UctSetup) {
-    super();
-
     this.#setup = setup;
     this.#printer = ts.createPrinter(setup.program.getCompilerOptions());
   }
@@ -61,7 +69,7 @@ export class UctLib extends UccLib implements UctTasks {
   }
 
   #compileUcDeserializer(task: UctCompileFn): void {
-    (this.#ucdModels ??= new UccCode()).write(this.#addModel(task));
+    (this.#ucdModels ??= new EsCode()).write(this.#addModel(task));
   }
 
   compileUcSerializer(task: UctCompileFn): void {
@@ -69,10 +77,10 @@ export class UctLib extends UccLib implements UctTasks {
   }
 
   #compileUcSerializer(task: UctCompileFn): void {
-    (this.#ucsModels ??= new UccCode()).write(this.#addModel(task));
+    (this.#ucsModels ??= new EsCode()).write(this.#addModel(task));
   }
 
-  #addModel({ fnId, modelId, from }: UctCompileFn): UccSource {
+  #addModel({ fnId, modelId, from }: UctCompileFn): EsSnippet {
     const moduleName = from.endsWith('ts')
       ? from.slice(0, -2) + 'js'
       : from.endsWith('tsx')
@@ -85,78 +93,114 @@ export class UctLib extends UccLib implements UctTasks {
       moduleSpec = './' + moduleSpec;
     }
 
-    const model = this.import(moduleSpec, modelId.text);
+    const model = esImport(moduleSpec, modelId.text);
 
-    return `${fnId}: ${model},`;
+    return esline`${fnId}: ${model},`;
   }
 
   async emitBundler(): Promise<UctLib.Bundler | undefined> {
-    if (!this.#emitBundler()) {
+    const bundler = this.#emitBundler();
+
+    if (!bundler) {
       return;
     }
 
     return {
       fileName: path.join(this.#rootDir!, `${BUNDLER_FILE_NAME}.ts`),
-      sourceText: await this.bundle.compile().toText(),
+      sourceText: await esGenerate(esline`await ${bundler.call()};`),
     };
   }
 
-  #emitBundler(): boolean {
+  #emitBundler(): EsFunction<EsSignature.NoArgs> | undefined {
     this.#tasks.forEach(task => task());
 
     const ucdModels = this.#ucdModels;
     const ucsModels = this.#ucsModels;
 
     if (!ucdModels && !ucsModels) {
-      return false;
+      return;
     }
 
-    const emitBundle = this.declarations.declareFunction(
+    return new EsFunction(
       'emitBundle',
-      [],
-      ({ ns }) => code => {
-          const writeFile = this.import('node:fs/promises', 'writeFile');
-          const bundle = ns.name('bundle');
-          const UccBundle = this.import('churi/compiler.js', 'UccBundle');
-
-          code.write(`const ${bundle} = new ${UccBundle};`);
-          if (ucdModels) {
-            const UcdSetup = this.import('churi/compiler.js', 'UcdSetup');
-
-            code
-              .write(`await new ${UcdSetup}({`)
-              .indent(code => {
-                code.write(`bundle: ${bundle},`).write(`models: {`).indent(ucdModels).write(`},`);
-              })
-              .write('}).bootstrap();');
-          }
-          if (ucsModels) {
-            const UcsSetup = this.import('churi/compiler.js', 'UcsSetup');
-
-            code
-              .write(`await new ${UcsSetup}({`)
-              .indent(code => {
-                code.write(`bundle: ${bundle},`).write(`models: {`).indent(ucsModels).write(`},`);
-              })
-              .write(`}).bootstrap();`);
-          }
-          code
-            .write(`await ${writeFile}(`)
-            .indent(code => {
-              code
-                .write(jsStringLiteral(this.#setup.dist) + ',')
-                .write(`await ${bundle}.compile().toText(),`, '');
-            })
-            .write(');');
-        },
+      {},
       {
-        async: true,
+        declare: {
+          at: 'bundle',
+          async: true,
+          body: () => code => {
+            const writeFile = esImport('node:fs/promises', 'writeFile');
+            const compilers: EsSymbol[] = [];
+
+            if (ucdModels) {
+              const UcdCompiler = esImport('churi/compiler.js', 'UcdCompiler');
+              const ucdCompiler = new EsVarSymbol('ucdCompiler');
+
+              compilers.push(ucdCompiler);
+              code.write(
+                ucdCompiler.declare({
+                  value: () => code => {
+                    code.multiLine(code => {
+                      code
+                        .write(esline`new ${UcdCompiler}({`)
+                        .indent(code => {
+                          code.write(`models: {`).indent(ucdModels).write(`},`);
+                        })
+                        .write('})');
+                    });
+                  },
+                }),
+              );
+            }
+            if (ucsModels) {
+              const UcsCompiler = esImport('churi/compiler.js', 'UcsCompiler');
+              const ucsCompiler = new EsVarSymbol('ucsCompiler');
+
+              compilers.push(ucsCompiler);
+              code.write(
+                ucsCompiler.declare({
+                  value: () => code => {
+                    code.multiLine(code => {
+                      code
+                        .write(esline`await new ${UcsCompiler}({`)
+                        .indent(code => {
+                          code.write(`models: {`).indent(ucsModels).write(`},`);
+                        })
+                        .write(`})`);
+                    });
+                  },
+                }),
+              );
+            }
+
+            code
+              .write(esline`await ${writeFile}(`)
+              .indent(code => {
+                code.write(esStringLiteral(this.#setup.dist) + ',').line(code => {
+                  code.multiLine(code => {
+                    const generate = esImport('esgen', 'esGenerate');
+
+                    code
+                      .write(esline`await ${generate}({`)
+                      .indent(code => {
+                        code
+                          .write('setup: [')
+                          .indent(code => {
+                            for (const compiler of compilers) {
+                              code.line(esline`await ${compiler}.bootstrap(),`);
+                            }
+                          })
+                          .write('],');
+                      })
+                      .write('}),');
+                  });
+                });
+              })
+              .write(');');
+          },
+        },
       },
     );
-
-    this.bundle.body.write(`await ${emitBundle}();`);
-
-    return true;
   }
 
   async compile(): Promise<void> {

@@ -1,4 +1,4 @@
-import { UccNamespace } from 'churi/compiler.js';
+import { EsNameRegistry } from 'esgen';
 import path from 'node:path';
 import ts from 'typescript';
 import { TsNodeMapper } from './ts-node-mapper.js';
@@ -12,7 +12,7 @@ export class UcTransformer {
   readonly #dist: string;
   #tasks: UctTasks;
 
-  readonly #ns = new UccNamespace();
+  readonly #ns = new EsNameRegistry();
   #churiExports?: ChuriExports;
 
   constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
@@ -275,14 +275,14 @@ export class UcTransformer {
       if (ts.isIdentifier(name)) {
         return {
           modelId: factory.createIdentifier(UC_MODEL_PREFIX + name.text + UC_MODEL_SUFFIX),
-          fnId: this.#ns.name(name.text),
+          fnId: this.#ns.reserveName(name.text),
         };
       }
     }
 
     return {
       modelId: factory.createIdentifier(UC_MODEL_PREFIX + UC_MODEL_SUFFIX),
-      fnId: this.#ns.name(suggested),
+      fnId: this.#ns.reserveName(suggested),
     };
   }
 
