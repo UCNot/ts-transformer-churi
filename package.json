@@ -31,7 +31,7 @@
   "dependencies": {
     "@proc7ts/primitives": "4.0.1",
     "@run-z/npk": "^0.6.0",
-    "esgen": "^0.2.7"
+    "esgen": "^0.2.8"
   },
   "devDependencies": {
     "@jest/globals": "^29.6.0",
