@@ -133,7 +133,7 @@ export class UcTransformer {
     this.#tasks.compileUcDeserializer({
       fnId,
       modelId,
-      from: stTfm.fileTfm.editor.sourceFile.fileName,
+      from: stTfm.sourceFile.fileName,
     });
 
     return replacement;
@@ -150,7 +150,7 @@ export class UcTransformer {
     this.#tasks.compileUcSerializer({
       fnId,
       modelId,
-      from: stTfm.fileTfm.editor.sourceFile.fileName,
+      from: stTfm.sourceFile.fileName,
     });
 
     return replacement;

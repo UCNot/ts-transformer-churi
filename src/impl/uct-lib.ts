@@ -1,18 +1,8 @@
-import {
-  EsCode,
-  EsFunction,
-  EsSignature,
-  EsSnippet,
-  EsSymbol,
-  EsVarSymbol,
-  esGenerate,
-  esImport,
-  esStringLiteral,
-  esline,
-} from 'esgen';
+import { EsFunction, EsSignature, esGenerate, esline } from 'esgen';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
+import { UctBundle } from './uct-bundle.js';
 import { wrapUctCompilerHost } from './uct-compiler-host.js';
 import { UctSetup } from './uct-setup.js';
 import { UctCompileFn, UctTasks } from './uct-tasks.js';
@@ -24,14 +14,17 @@ export class UctLib implements UctTasks {
   readonly #printer: ts.Printer;
   readonly #tasks: (() => void)[] = [];
   readonly #vfs: Record<string, string> = {};
+  readonly #bundle: UctBundle;
   #rootDir?: string;
-
-  #ucdModels?: EsCode;
-  #ucsModels?: EsCode;
 
   constructor(setup: UctSetup) {
     this.#setup = setup;
     this.#printer = ts.createPrinter(setup.program.getCompilerOptions());
+    this.#bundle = new UctBundle(this, setup.dist);
+  }
+
+  get rootDir(): string | undefined {
+    return this.#rootDir;
   }
 
   replaceSourceFile(sourceFile: ts.SourceFile): void {
@@ -65,37 +58,11 @@ export class UctLib implements UctTasks {
   }
 
   compileUcDeserializer(task: UctCompileFn): void {
-    this.#tasks.push(() => this.#compileUcDeserializer(task));
-  }
-
-  #compileUcDeserializer(task: UctCompileFn): void {
-    (this.#ucdModels ??= new EsCode()).write(this.#addModel(task));
+    this.#tasks.push(() => this.#bundle.compileUcDeserializer(task));
   }
 
   compileUcSerializer(task: UctCompileFn): void {
-    this.#tasks.push(() => this.#compileUcSerializer(task));
-  }
-
-  #compileUcSerializer(task: UctCompileFn): void {
-    (this.#ucsModels ??= new EsCode()).write(this.#addModel(task));
-  }
-
-  #addModel({ fnId, modelId, from }: UctCompileFn): EsSnippet {
-    const moduleName = from.endsWith('ts')
-      ? from.slice(0, -2) + 'js'
-      : from.endsWith('tsx')
-      ? from.slice(0, -3) + '.js'
-      : from;
-    const modulePath = path.relative(this.#rootDir!, moduleName);
-    let moduleSpec = modulePath.replaceAll(path.sep, '/');
-
-    if (!moduleSpec.startsWith('./') && !moduleSpec.startsWith('../')) {
-      moduleSpec = './' + moduleSpec;
-    }
-
-    const model = esImport(moduleSpec, modelId.text);
-
-    return esline`${fnId}: ${model},`;
+    this.#tasks.push(() => this.#bundle.compileUcSerializer(task));
   }
 
   async emitBundler(): Promise<UctLib.Bundler | undefined> {
@@ -114,93 +81,7 @@ export class UctLib implements UctTasks {
   #emitBundler(): EsFunction<EsSignature.NoArgs> | undefined {
     this.#tasks.forEach(task => task());
 
-    const ucdModels = this.#ucdModels;
-    const ucsModels = this.#ucsModels;
-
-    if (!ucdModels && !ucsModels) {
-      return;
-    }
-
-    return new EsFunction(
-      'emitBundle',
-      {},
-      {
-        declare: {
-          at: 'bundle',
-          async: true,
-          body: () => code => {
-            const writeFile = esImport('node:fs/promises', 'writeFile');
-            const compilers: EsSymbol[] = [];
-
-            if (ucdModels) {
-              const UcdCompiler = esImport('churi/compiler.js', 'UcdCompiler');
-              const ucdCompiler = new EsVarSymbol('ucdCompiler');
-
-              compilers.push(ucdCompiler);
-              code.write(
-                ucdCompiler.declare({
-                  value: () => code => {
-                    code.multiLine(code => {
-                      code
-                        .write(esline`new ${UcdCompiler}({`)
-                        .indent(code => {
-                          code.write(`models: {`).indent(ucdModels).write(`},`);
-                        })
-                        .write('})');
-                    });
-                  },
-                }),
-              );
-            }
-            if (ucsModels) {
-              const UcsCompiler = esImport('churi/compiler.js', 'UcsCompiler');
-              const ucsCompiler = new EsVarSymbol('ucsCompiler');
-
-              compilers.push(ucsCompiler);
-              code.write(
-                ucsCompiler.declare({
-                  value: () => code => {
-                    code.multiLine(code => {
-                      code
-                        .write(esline`await new ${UcsCompiler}({`)
-                        .indent(code => {
-                          code.write(`models: {`).indent(ucsModels).write(`},`);
-                        })
-                        .write(`})`);
-                    });
-                  },
-                }),
-              );
-            }
-
-            code
-              .write(esline`await ${writeFile}(`)
-              .indent(code => {
-                code.write(esStringLiteral(this.#setup.dist) + ',').line(code => {
-                  code.multiLine(code => {
-                    const generate = esImport('esgen', 'esGenerate');
-
-                    code
-                      .write(esline`await ${generate}({`)
-                      .indent(code => {
-                        code
-                          .write('setup: [')
-                          .indent(code => {
-                            for (const compiler of compilers) {
-                              code.line(esline`await ${compiler}.bootstrap(),`);
-                            }
-                          })
-                          .write('],');
-                      })
-                      .write('}),');
-                  });
-                });
-              })
-              .write(');');
-          },
-        },
-      },
-    );
+    return this.#bundle.emitBundlerFn();
   }
 
   async compile(): Promise<void> {
