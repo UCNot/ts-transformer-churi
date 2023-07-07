@@ -1,6 +1,7 @@
 import { EsNameRegistry } from 'esgen';
 import path from 'node:path';
 import ts from 'typescript';
+import { ChuriLib } from './churi-lib.js';
 import { TsFileEditor } from './ts-file-editor.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
@@ -13,13 +14,14 @@ export class UcTransformer {
   #tasks: UctTasks;
 
   readonly #ns = new EsNameRegistry();
-  #churiExports?: ChuriExports;
+  readonly #churi: ChuriLib;
 
   constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
     const { program, dist } = setup;
 
     this.#typeChecker = program.getTypeChecker();
     this.#dist = dist;
+    this.#churi = new ChuriLib(this.#typeChecker);
     this.#tasks = tasks;
   }
 
@@ -113,40 +115,13 @@ export class UcTransformer {
   }
 
   #importOrExport(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
-    if (this.#churiExports) {
-      return; // No need to inspect further.
-    }
-
-    const { moduleSpecifier } = node;
-
-    if (this.#isChuriSpecifier(moduleSpecifier)) {
-      this.#referChuri(moduleSpecifier);
-    }
-  }
-
-  #isChuriSpecifier(
-    node: ts.Expression | ts.ExportSpecifier | undefined,
-  ): node is ts.StringLiteral {
-    return !!node && ts.isStringLiteral(node) && node.text === 'churi';
-  }
-
-  #referChuri(node: ts.Expression | ts.ExportSpecifier): void {
-    const moduleSymbol = this.#typeChecker.getSymbolAtLocation(node)!;
-
-    this.#churiExports = {
-      createUcDeserializer: this.#typeChecker.tryGetMemberInModuleExports(
-        'createUcDeserializer',
-        moduleSymbol,
-      )!,
-      createUcSerializer: this.#typeChecker.tryGetMemberInModuleExports(
-        'createUcSerializer',
-        moduleSymbol,
-      )!,
-    };
+    this.#churi.update(node);
   }
 
   #call(node: ts.CallExpression, context: StatementContext): ts.Node | undefined {
-    if (!this.#churiExports) {
+    const churiExports = this.#churi.exports;
+
+    if (!churiExports) {
       // No imports from `churi` yet.
       return;
     }
@@ -167,9 +142,9 @@ export class UcTransformer {
     }
 
     switch (callee) {
-      case this.#churiExports.createUcDeserializer:
+      case churiExports.createUcDeserializer:
         return this.#createDeserializer(node, context);
-      case this.#churiExports.createUcSerializer:
+      case churiExports.createUcSerializer:
         return this.#createSerializer(node, context);
     }
 
@@ -294,11 +269,6 @@ export class UcTransformer {
 
 const UC_MODEL_PREFIX = '\u2c1f';
 const UC_MODEL_SUFFIX = '$$uc$model';
-
-interface ChuriExports {
-  readonly createUcDeserializer: ts.Symbol;
-  readonly createUcSerializer: ts.Symbol;
-}
 
 interface SourceFileContext {
   readonly editor: TsFileEditor;
