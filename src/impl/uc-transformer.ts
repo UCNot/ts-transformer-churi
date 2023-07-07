@@ -1,7 +1,7 @@
 import { EsNameRegistry } from 'esgen';
 import path from 'node:path';
 import ts from 'typescript';
-import { TsNodeMapper } from './ts-node-mapper.js';
+import { TsFileEditor } from './ts-file-editor.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
@@ -32,12 +32,10 @@ export class UcTransformer {
     context: ts.TransformationContext,
   ): ts.SourceFile {
     const imports: ts.ImportDeclaration[] = [];
-    const mapper = new TsNodeMapper(sourceFile, context);
+    const editor = new TsFileEditor(sourceFile, context);
     const srcContext: SourceFileContext = {
-      context,
-      sourceFile,
+      editor,
       imports,
-      mapper,
     };
     const { factory } = context;
 
@@ -47,7 +45,7 @@ export class UcTransformer {
       result = factory.updateSourceFile(result, [...imports, ...result.statements]);
     }
     if (result !== sourceFile) {
-      this.#tasks.replaceSourceFile(mapper.updateAll());
+      this.#tasks.replaceSourceFile(editor.emitFile());
     }
 
     return result;
@@ -68,7 +66,11 @@ export class UcTransformer {
   }
 
   #each<TNode extends ts.Node>(node: TNode, srcContext: SourceFileContext): TNode {
-    return ts.visitEachChild(node, node => this.#transform(node, srcContext), srcContext.context);
+    return ts.visitEachChild(
+      node,
+      node => this.#transform(node, srcContext),
+      srcContext.editor.context,
+    );
   }
 
   #statement(statement: ts.Statement, srcContext: SourceFileContext): ts.Node {
@@ -82,13 +84,13 @@ export class UcTransformer {
     const result = ts.visitEachChild(
       statement,
       node => this.#transformExpression(node, stContext),
-      srcContext.context,
+      srcContext.editor.context,
     );
 
     if (prefix.length) {
-      const { mapper } = srcContext;
+      const { editor: editor } = srcContext;
 
-      mapper.addMapping(statement, () => [...prefix, mapper.updateNode(statement)]);
+      editor.mapNode(statement, () => [...prefix, editor.emitNode(statement)]);
     }
 
     return result;
@@ -106,7 +108,7 @@ export class UcTransformer {
     return ts.visitEachChild(
       node,
       node => this.#transformExpression(node, context),
-      context.srcContext.context,
+      context.srcContext.editor.context,
     );
   }
 
@@ -185,7 +187,7 @@ export class UcTransformer {
     this.#tasks.compileUcDeserializer({
       fnId,
       modelId,
-      from: context.srcContext.sourceFile.fileName,
+      from: context.srcContext.editor.sourceFile.fileName,
     });
 
     return replacement;
@@ -202,7 +204,7 @@ export class UcTransformer {
     this.#tasks.compileUcSerializer({
       fnId,
       modelId,
-      from: context.srcContext.sourceFile.fileName,
+      from: context.srcContext.editor.sourceFile.fileName,
     });
 
     return replacement;
@@ -219,11 +221,11 @@ export class UcTransformer {
     readonly modelId: ts.Identifier;
   } {
     const { srcContext } = context;
+    const { editor: file } = srcContext;
     const {
       sourceFile,
       context: { factory },
-      mapper,
-    } = srcContext;
+    } = file;
     const { modelId, fnId } = this.#createIds(node, context, suffix);
 
     context.prefix.push(
@@ -252,7 +254,7 @@ export class UcTransformer {
       ),
     );
 
-    mapper.addMapping(node, () => factory.updateCallExpression(node, node.expression, node.typeArguments, [
+    file.mapNode(node, () => factory.updateCallExpression(node, node.expression, node.typeArguments, [
         modelId,
         ...node.arguments.slice(1),
       ]));
@@ -266,7 +268,9 @@ export class UcTransformer {
     suggested: string,
   ): { modelId: ts.Identifier; fnId: string } {
     const {
-      context: { factory },
+      editor: {
+        context: { factory },
+      },
     } = srcContext;
 
     if (ts.isVariableDeclaration(parent)) {
@@ -297,10 +301,8 @@ interface ChuriExports {
 }
 
 interface SourceFileContext {
-  readonly context: ts.TransformationContext;
-  readonly sourceFile: ts.SourceFile;
+  readonly editor: TsFileEditor;
   readonly imports: ts.ImportDeclaration[];
-  readonly mapper: TsNodeMapper;
 }
 
 interface StatementContext {
