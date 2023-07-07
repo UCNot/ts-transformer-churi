@@ -13,7 +13,7 @@ export class ChuriLib {
     return this.#exports;
   }
 
-  update(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
+  onImportOrExport(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
     if (this.#exports) {
       return; // No need to inspect further.
     }
