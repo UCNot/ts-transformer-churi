@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { ChuriLib } from './churi-lib.js';
 import { TsFileEditor } from './ts-file-editor.js';
 import { TsFileTransformer } from './ts-file-transformer.js';
+import { TsStatementTransformer } from './ts-statement-transformer.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
@@ -65,49 +66,35 @@ export class UcTransformer {
   }
 
   #statement(statement: ts.Statement, fileTfm: TsFileTransformer): ts.Node {
-    const prefix: ts.Statement[] = [];
-    const stContext: StatementContext = {
-      fileTfm,
-      statement,
-      prefix,
-    };
-
+    const stTfm = new TsStatementTransformer(fileTfm, statement);
     const result = ts.visitEachChild(
       statement,
-      node => this.#transformExpression(node, stContext),
+      node => this.#transformExpression(node, stTfm),
       fileTfm.context,
     );
 
-    if (prefix.length) {
-      const { editor } = fileTfm;
-
-      editor.mapNode(statement, () => [...prefix, editor.emitNode(statement)]);
-    }
+    stTfm.transform(); // Call only _after_ transformation.
 
     return result;
   }
 
-  #transformExpression(node: ts.Node, context: StatementContext): ts.Node {
+  #transformExpression(node: ts.Node, stTfm: TsStatementTransformer): ts.Node {
     if (ts.isCallExpression(node)) {
-      return this.#call(node, context) ?? this.#eachExpression(node, context);
+      return this.#call(node, stTfm) ?? this.#eachExpression(node, stTfm);
     }
 
-    return this.#eachExpression(node, context);
+    return this.#eachExpression(node, stTfm);
   }
 
-  #eachExpression(node: ts.Node, context: StatementContext): ts.Node {
-    return ts.visitEachChild(
-      node,
-      node => this.#transformExpression(node, context),
-      context.fileTfm.editor.context,
-    );
+  #eachExpression(node: ts.Node, stTfm: TsStatementTransformer): ts.Node {
+    return ts.visitEachChild(node, node => this.#transformExpression(node, stTfm), stTfm.context);
   }
 
   #importOrExport(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
     this.#churi.onImportOrExport(node);
   }
 
-  #call(node: ts.CallExpression, context: StatementContext): ts.Node | undefined {
+  #call(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node | undefined {
     const churiExports = this.#churi.exports;
 
     if (!churiExports) {
@@ -132,35 +119,30 @@ export class UcTransformer {
 
     switch (callee) {
       case churiExports.createUcDeserializer:
-        return this.#createDeserializer(node, context);
+        return this.#createDeserializer(node, stTfm);
       case churiExports.createUcSerializer:
-        return this.#createSerializer(node, context);
+        return this.#createSerializer(node, stTfm);
     }
 
     return;
   }
 
-  #createDeserializer(node: ts.CallExpression, context: StatementContext): ts.Node {
-    const { replacement, fnId, modelId } = this.#extractModel(
-      node,
-      context,
-      this.#dist,
-      'readValue',
-    );
+  #createDeserializer(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
+    const { replacement, fnId, modelId } = this.#extractModel(node, stTfm, this.#dist, 'readValue');
 
     this.#tasks.compileUcDeserializer({
       fnId,
       modelId,
-      from: context.fileTfm.editor.sourceFile.fileName,
+      from: stTfm.fileTfm.editor.sourceFile.fileName,
     });
 
     return replacement;
   }
 
-  #createSerializer(node: ts.CallExpression, context: StatementContext): ts.Node {
+  #createSerializer(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
     const { replacement, fnId, modelId } = this.#extractModel(
       node,
-      context,
+      stTfm,
       this.#dist,
       'writeValue',
     );
@@ -168,7 +150,7 @@ export class UcTransformer {
     this.#tasks.compileUcSerializer({
       fnId,
       modelId,
-      from: context.fileTfm.editor.sourceFile.fileName,
+      from: stTfm.fileTfm.editor.sourceFile.fileName,
     });
 
     return replacement;
@@ -176,7 +158,7 @@ export class UcTransformer {
 
   #extractModel(
     node: ts.CallExpression,
-    context: StatementContext,
+    stTfm: TsStatementTransformer,
     distFile: string,
     suffix: string,
   ): {
@@ -184,11 +166,10 @@ export class UcTransformer {
     readonly fnId: string;
     readonly modelId: ts.Identifier;
   } {
-    const { fileTfm } = context;
-    const { sourceFile, factory, editor } = fileTfm;
-    const { modelId, fnId } = this.#createIds(node, context, suffix);
+    const { factory, sourceFile, fileTfm, editor } = stTfm;
+    const { modelId, fnId } = this.#createIds(node, stTfm, suffix);
 
-    context.prefix.push(
+    stTfm.addPrefix(
       factory.createVariableStatement(
         [factory.createModifier(ts.SyntaxKind.ExportKeyword)],
         factory.createVariableDeclarationList(
@@ -224,15 +205,9 @@ export class UcTransformer {
 
   #createIds(
     { parent }: ts.CallExpression,
-    { fileTfm }: StatementContext,
+    { factory }: TsStatementTransformer,
     suggested: string,
   ): { modelId: ts.Identifier; fnId: string } {
-    const {
-      editor: {
-        context: { factory },
-      },
-    } = fileTfm;
-
     if (ts.isVariableDeclaration(parent)) {
       const { name } = parent;
 
@@ -254,9 +229,3 @@ export class UcTransformer {
 
 const UC_MODEL_PREFIX = '\u2c1f';
 const UC_MODEL_SUFFIX = '$$uc$model';
-
-interface StatementContext {
-  readonly fileTfm: TsFileTransformer;
-  readonly statement: ts.Statement;
-  readonly prefix: ts.Statement[];
-}
