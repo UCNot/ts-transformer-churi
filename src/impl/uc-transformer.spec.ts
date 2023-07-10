@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ts from 'typescript';
 import { transform } from '../spec/transform.js';
+import { TsVfs } from './ts/ts-vfs.js';
 import { UcTransformer } from './uc-transformer.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
-import { UctVfs } from './uct-vfs.js';
 
 describe('UcTransformer', () => {
   let tasks: jest.Mocked<UctTasks>;
-  let createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer;
+  let createUcTransformer: (program: ts.Program, vfs: TsVfs) => UcTransformer;
 
   beforeEach(() => {
     tasks = {
@@ -16,7 +16,7 @@ describe('UcTransformer', () => {
       compileUcDeserializer: jest.fn(),
       compileUcSerializer: jest.fn(),
     };
-    createUcTransformer = (program, vfs) => new UcTransformer(new UctSetup(program, vfs), tasks);
+    createUcTransformer = (program, vfs) => new UcTransformer(new UctSetup({ program, vfs }), tasks);
   });
 
   it('discovers serializer', () => {

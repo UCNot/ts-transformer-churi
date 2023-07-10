@@ -2,86 +2,67 @@ import { EsFunction, EsSignature, esGenerate, esline } from 'esgen';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
-import { UctBundle } from './uct-bundle.js';
-import { wrapUctCompilerHost } from './uct-compiler-host.js';
+import { wrapTsCompilerHost } from './ts/ts-compiler-host.js';
+import { TsVfs } from './ts/ts-vfs.js';
+import { UctBundleRegistry } from './uct-bundle-registry.js';
 import { UctSetup } from './uct-setup.js';
-import { UctCompileFn, UctTasks } from './uct-tasks.js';
-import { UctVfs } from './uct-vfs.js';
+import { UctCompileSerializerFn, UctTasks } from './uct-tasks.js';
 
 export class UctLib implements UctTasks {
 
   readonly #setup: UctSetup;
+  readonly #bundleRegistry: UctBundleRegistry;
   readonly #printer: ts.Printer;
   readonly #tasks: (() => void)[] = [];
   readonly #vfs: Record<string, string> = {};
-  readonly #bundle: UctBundle;
-  #rootDir?: string;
 
   constructor(setup: UctSetup) {
     this.#setup = setup;
+    this.#bundleRegistry = setup.bundleRegistry;
     this.#printer = ts.createPrinter(setup.program.getCompilerOptions());
-    this.#bundle = new UctBundle(this, setup.dist);
-  }
-
-  get rootDir(): string | undefined {
-    return this.#rootDir;
   }
 
   replaceSourceFile(sourceFile: ts.SourceFile): void {
     const text = this.#printer.printFile(sourceFile);
 
     this.#vfs[sourceFile.fileName] = text;
-    this.#updateRootDir(sourceFile);
   }
 
-  #updateRootDir({ fileName }: ts.SourceFile): void {
-    const dir = path.dirname(fileName);
-
-    if (!this.#rootDir) {
-      this.#rootDir = dir;
-
-      return;
-    }
-
-    let rootFragments = this.#rootDir.split(path.sep);
-    let dirFragments = dir.split(path.sep);
-
-    if (dirFragments.length < rootFragments.length) {
-      [rootFragments, dirFragments] = [dirFragments, rootFragments];
-    }
-
-    for (let i = 0; i < rootFragments.length; ++i) {
-      if (rootFragments[i] !== dirFragments[i]) {
-        this.#rootDir = rootFragments.slice(0, i).join(path.sep);
-      }
-    }
+  compileUcDeserializer(task: UctCompileSerializerFn): void {
+    this.#tasks.push(() => task.bundle.compileUcDeserializer(task));
   }
 
-  compileUcDeserializer(task: UctCompileFn): void {
-    this.#tasks.push(() => this.#bundle.compileUcDeserializer(task));
-  }
-
-  compileUcSerializer(task: UctCompileFn): void {
-    this.#tasks.push(() => this.#bundle.compileUcSerializer(task));
+  compileUcSerializer(task: UctCompileSerializerFn): void {
+    this.#tasks.push(() => task.bundle.compileUcSerializer(task));
   }
 
   async emitBundler(): Promise<UctLib.Bundler | undefined> {
-    const bundler = this.#emitBundler();
+    const bundlerFns = [...this.#emitBundlerFns()];
 
-    if (!bundler) {
+    if (!bundlerFns.length) {
       return;
     }
 
     return {
-      fileName: path.join(this.#rootDir!, `${BUNDLER_FILE_NAME}.ts`),
-      sourceText: await esGenerate(esline`await ${bundler.call()};`),
+      fileName: path.join(this.#setup.tsRoot.rootDir!, `${BUNDLER_FILE_NAME}.ts`),
+      sourceText: await esGenerate(code => {
+        for (const bundlerFn of bundlerFns) {
+          code.write(esline`await ${bundlerFn.call()};`);
+        }
+      }),
     };
   }
 
-  #emitBundler(): EsFunction<EsSignature.NoArgs> | undefined {
+  *#emitBundlerFns(): IterableIterator<EsFunction<EsSignature.NoArgs>> {
     this.#tasks.forEach(task => task());
 
-    return this.#bundle.emitBundlerFn();
+    for (const bundle of this.#bundleRegistry.bundles()) {
+      const bundlerFn = bundle.emitBundlerFn();
+
+      if (bundlerFn) {
+        yield bundlerFn;
+      }
+    }
   }
 
   async compile(): Promise<void> {
@@ -102,7 +83,7 @@ export class UctLib implements UctTasks {
     }
   }
 
-  #emitCompiler({ fileName, sourceText }: UctLib.Bundler, outDir: string, vfs?: UctVfs): string {
+  #emitCompiler({ fileName, sourceText }: UctLib.Bundler, outDir: string, vfs?: TsVfs): string {
     const programOptions = this.#setup.program.getCompilerOptions();
     const options: ts.CompilerOptions = {
       ...programOptions,
@@ -115,7 +96,7 @@ export class UctLib implements UctTasks {
       outDir,
     };
 
-    const host = wrapUctCompilerHost(ts.createCompilerHost(options, true), {
+    const host = wrapTsCompilerHost(ts.createCompilerHost(options, true), {
       ...vfs,
       [fileName]: sourceText,
     });

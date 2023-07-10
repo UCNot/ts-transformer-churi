@@ -1,19 +1,19 @@
 import path from 'node:path';
 import ts from 'typescript';
-import { reportErrors } from '../impl/report-errors.js';
+import { reportTsErrors } from '../impl/ts/report-ts-errors.js';
+import { wrapTsCompilerHost } from '../impl/ts/ts-compiler-host.js';
+import { TsVfs, createTsVfs } from '../impl/ts/ts-vfs.js';
 import { UcTransformer } from '../impl/uc-transformer.js';
-import { wrapUctCompilerHost } from '../impl/uct-compiler-host.js';
-import { UctVfs, createUctVfs } from '../impl/uct-vfs.js';
 
 export function transform(
-  vfsFiles: UctVfs,
-  createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer,
+  vfsFiles: TsVfs,
+  createUcTransformer: (program: ts.Program, vfs: TsVfs) => UcTransformer,
 ): string {
   const testDir = path.resolve('src', 'spec', 'tests');
   const testFile = path.resolve(testDir, Object.keys(vfsFiles)[0]);
   const { program, vfs } = createProgram(vfsFiles, testDir);
 
-  if (reportErrors(FORMAT_HOST, ts.getPreEmitDiagnostics(program))) {
+  if (reportTsErrors(FORMAT_HOST, ts.getPreEmitDiagnostics(program))) {
     throw new Error('Failed to compile');
   }
 
@@ -51,17 +51,17 @@ const FORMAT_HOST: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: ts.sys.useCaseSensitiveFileNames ? f => f : f => f.toLowerCase(),
 };
 
-function createProgram(vfsFiles: UctVfs, dir?: string): { program: ts.Program; vfs: UctVfs } {
+function createProgram(vfsFiles: TsVfs, dir?: string): { program: ts.Program; vfs: TsVfs } {
   const { options } = loadCompilerConfig();
   const host = ts.createCompilerHost(options, true);
   const cwd = host.getCurrentDirectory();
-  const vfs = createUctVfs(dir ? path.resolve(cwd, dir) : cwd, vfsFiles);
+  const vfs = createTsVfs(dir ? path.resolve(cwd, dir) : cwd, vfsFiles);
 
   return {
     program: ts.createProgram({
       rootNames: [Object.keys(vfs)[0]],
       options,
-      host: wrapUctCompilerHost(host, vfs),
+      host: wrapTsCompilerHost(host, vfs),
     }),
     vfs,
   };
@@ -83,7 +83,7 @@ function loadCompilerConfig(): {
     readonly error?: ts.Diagnostic;
   } = ts.readConfigFile(configPath, ts.sys.readFile);
 
-  if (error && reportErrors(FORMAT_HOST, [error])) {
+  if (error && reportTsErrors(FORMAT_HOST, [error])) {
     throw new Error(`Failed to load ${tsconfig}`);
   }
 
@@ -95,7 +95,7 @@ function loadCompilerConfig(): {
     tsconfig,
   );
 
-  if (reportErrors(FORMAT_HOST, errors)) {
+  if (reportTsErrors(FORMAT_HOST, errors)) {
     throw new Error(`Failed to parse ${tsconfig}`);
   }
 

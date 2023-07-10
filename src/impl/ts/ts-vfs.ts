@@ -1,11 +1,11 @@
 import path from 'node:path';
 import ts from 'typescript';
 
-export interface UctVfs {
+export interface TsVfs {
   readonly [path: string]: string;
 }
 
-export function createUctVfs(dir: string, vfsFiles: UctVfs): UctVfs {
+export function createTsVfs(dir: string, vfsFiles: TsVfs): TsVfs {
   const rootDir = path.resolve(dir);
 
   return Object.fromEntries(

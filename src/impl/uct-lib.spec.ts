@@ -3,20 +3,22 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { transform } from '../spec/transform.js';
+import { TsVfs } from './ts/ts-vfs.js';
 import { UcTransformer } from './uc-transformer.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
-import { UctVfs } from './uct-vfs.js';
 
 describe('UctLib', () => {
   let lib: UctLib;
-  let createUcTransformer: (program: ts.Program, vfs: UctVfs) => UcTransformer;
+  let createUcTransformer: (program: ts.Program, vfs: TsVfs) => UcTransformer;
   let testDir: string;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp('target/test-');
     createUcTransformer = (program, vfs) => {
-      const setup = new UctSetup(program, vfs, {
+      const setup = new UctSetup({
+        program,
+        vfs,
         dist: `${testDir}/test.uc-lib.js`,
         tempDir: testDir,
       });

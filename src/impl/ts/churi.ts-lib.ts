@@ -1,11 +1,12 @@
 import ts from 'typescript';
+import { TsSetup } from './ts-setup.js';
 
-export class ChuriLib {
+export class ChuriTsLib {
 
   readonly #typeChecker: ts.TypeChecker;
   #exports?: ChuriLibExports;
 
-  constructor(typeChecker: ts.TypeChecker) {
+  constructor({ typeChecker }: TsSetup) {
     this.#typeChecker = typeChecker;
   }
 

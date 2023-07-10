@@ -1,29 +1,33 @@
+import { UcDeserializer } from 'churi';
 import { EsNameRegistry } from 'esgen';
 import path from 'node:path';
 import ts from 'typescript';
-import { ChuriLib } from './churi-lib.js';
-import { TsFileEditor } from './ts-file-editor.js';
-import { TsFileTransformer } from './ts-file-transformer.js';
-import { TsStatementTransformer } from './ts-statement-transformer.js';
+import { TsFileEditor } from './ts/ts-file-editor.js';
+import { TsFileTransformer } from './ts/ts-file-transformer.js';
+import { TsOptionsLiteral } from './ts/ts-options-literal.js';
+import { TsRoot } from './ts/ts-root.js';
+import { TsStatementTransformer } from './ts/ts-statement-transformer.js';
+import { UctBundleRegistry } from './uct-bundle-registry.js';
+import { UctBundle } from './uct-bundle.js';
 import { UctLib } from './uct-lib.js';
 import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
 
 export class UcTransformer {
 
-  readonly #typeChecker: ts.TypeChecker;
-  readonly #dist: string;
+  readonly #setup: UctSetup;
+  readonly #tsRoot: TsRoot;
+  readonly #bundleRegistry: UctBundleRegistry;
   #tasks: UctTasks;
 
   readonly #ns = new EsNameRegistry();
-  readonly #churi: ChuriLib;
 
   constructor(setup: UctSetup, tasks: UctTasks = new UctLib(setup)) {
-    const { program, dist } = setup;
+    const { tsRoot, bundleRegistry } = setup;
 
-    this.#typeChecker = program.getTypeChecker();
-    this.#dist = dist;
-    this.#churi = new ChuriLib(this.#typeChecker);
+    this.#setup = setup;
+    this.#tsRoot = tsRoot;
+    this.#bundleRegistry = bundleRegistry;
     this.#tasks = tasks;
   }
 
@@ -41,7 +45,10 @@ export class UcTransformer {
 
     result = fileTfm.transform(result);
     if (result !== sourceFile) {
-      this.#tasks.replaceSourceFile(editor.emitFile());
+      const emittedFile = editor.emitFile();
+
+      this.#tsRoot.updateRootDir(emittedFile);
+      this.#tasks.replaceSourceFile(emittedFile);
     }
 
     return result;
@@ -91,11 +98,11 @@ export class UcTransformer {
   }
 
   #importOrExport(node: ts.ImportDeclaration | ts.ExportDeclaration): void {
-    this.#churi.onImportOrExport(node);
+    this.#setup.libs.churi.onImportOrExport(node);
   }
 
   #call(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node | undefined {
-    const churiExports = this.#churi.exports;
+    const churiExports = this.#setup.libs.churi.exports;
 
     if (!churiExports) {
       // No imports from `churi` yet.
@@ -106,31 +113,54 @@ export class UcTransformer {
       return;
     }
 
-    let callee = this.#typeChecker.getSymbolAtLocation(node.expression);
+    const callee = this.#setup.resolveSymbolAtLocation(node.expression);
 
     if (!callee) {
       // Callee is not a symbol
       return;
     }
 
-    if (callee.flags & ts.SymbolFlags.Alias) {
-      callee = this.#typeChecker.getAliasedSymbol(callee);
-    }
-
     switch (callee) {
       case churiExports.createUcDeserializer:
-        return this.#createDeserializer(node, stTfm);
+        return this.#createDeserializer(callee, node, stTfm);
       case churiExports.createUcSerializer:
-        return this.#createSerializer(node, stTfm);
+        return this.#createSerializer(callee, node, stTfm);
     }
 
     return;
   }
 
-  #createDeserializer(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
-    const { replacement, fnId, modelId } = this.#extractModel(node, stTfm, this.#dist, 'readValue');
+  #createDeserializer(
+    callee: ts.Symbol,
+    node: ts.CallExpression,
+    stTfm: TsStatementTransformer,
+  ): ts.Node {
+    const options = this.#extractCompilerOptions(callee, node);
+    const bundle = this.#bundleRegistry.resolveBundle(options);
+    const { replacement, fnId, modelId } = this.#extractModel(bundle, node, stTfm, 'readValue');
 
     this.#tasks.compileUcDeserializer({
+      bundle: bundle,
+      fnId,
+      modelId,
+      from: stTfm.sourceFile.fileName,
+      mode: (options.options.mode?.getString() as UcDeserializer.Mode) ?? 'universal',
+    });
+
+    return replacement;
+  }
+
+  #createSerializer(
+    callee: ts.Symbol,
+    node: ts.CallExpression,
+    stTfm: TsStatementTransformer,
+  ): ts.Node {
+    const options = this.#extractCompilerOptions(callee, node);
+    const bundle = this.#bundleRegistry.resolveBundle(options);
+    const { replacement, fnId, modelId } = this.#extractModel(bundle, node, stTfm, 'writeValue');
+
+    this.#tasks.compileUcSerializer({
+      bundle,
       fnId,
       modelId,
       from: stTfm.sourceFile.fileName,
@@ -139,27 +169,18 @@ export class UcTransformer {
     return replacement;
   }
 
-  #createSerializer(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
-    const { replacement, fnId, modelId } = this.#extractModel(
-      node,
-      stTfm,
-      this.#dist,
-      'writeValue',
+  #extractCompilerOptions(callee: ts.Symbol, node: ts.CallExpression): TsOptionsLiteral {
+    return new TsOptionsLiteral(
+      this.#setup,
+      callee.name,
+      node.arguments.length > 1 ? node.arguments[1] : undefined,
     );
-
-    this.#tasks.compileUcSerializer({
-      fnId,
-      modelId,
-      from: stTfm.sourceFile.fileName,
-    });
-
-    return replacement;
   }
 
   #extractModel(
+    bundle: UctBundle,
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
-    distFile: string,
     suffix: string,
   ): {
     readonly replacement: ts.Node;
@@ -191,7 +212,9 @@ export class UcTransformer {
             factory.createImportSpecifier(false, factory.createIdentifier(fnId), fnAlias),
           ]),
         ),
-        factory.createStringLiteral(path.relative(path.dirname(sourceFile.fileName), distFile)),
+        factory.createStringLiteral(
+          path.relative(path.dirname(sourceFile.fileName), bundle.distFile),
+        ),
       ),
     );
 
@@ -225,6 +248,13 @@ export class UcTransformer {
     };
   }
 
+}
+
+export interface UcTransformerInit {
+  readonly setup: UctSetup;
+  readonly tsRoot?: TsRoot | undefined;
+  readonly bundleRegistry?: UctBundleRegistry | undefined;
+  readonly tasks?: UctTasks | undefined;
 }
 
 const UC_MODEL_PREFIX = '\u2c1f';

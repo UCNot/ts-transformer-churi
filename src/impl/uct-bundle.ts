@@ -10,36 +10,53 @@ import {
   esline,
 } from 'esgen';
 import path from 'node:path';
-import { UctLib } from './uct-lib.js';
-import { UctCompileFn } from './uct-tasks.js';
+import ts from 'typescript';
+import { TsOptionsLiteral } from './ts/ts-options-literal.js';
+import { UctSetup } from './uct-setup.js';
+import { UctCompileSerializerFn } from './uct-tasks.js';
 
 export class UctBundle {
 
-  readonly #lib: UctLib;
-  readonly #dist: string;
+  readonly #setup: UctSetup;
+  #distFile: string;
   #ucdModels?: EsCode;
   #ucsModels?: EsCode;
 
-  constructor(lib: UctLib, dist: string) {
-    this.#lib = lib;
-    this.#dist = dist;
+  constructor(setup: UctSetup, distFile: string) {
+    this.#setup = setup;
+    this.#distFile = distFile;
   }
 
-  compileUcDeserializer(task: UctCompileFn): void {
+  get distFile(): string {
+    return this.#distFile;
+  }
+
+  configure(sourceFile: ts.SourceFile, symbol: ts.Symbol, node: ts.Node): void {
+    const { options } = new TsOptionsLiteral(this.#setup, symbol.name, node);
+    const dist = options.dist.getString();
+
+    if (dist != null) {
+      this.#distFile = path.resolve(sourceFile.fileName, dist);
+    }
+
+    // TODO extract bundle data
+  }
+
+  compileUcDeserializer(task: UctCompileSerializerFn): void {
     (this.#ucdModels ??= new EsCode()).write(this.#addModel(task));
   }
 
-  compileUcSerializer(task: UctCompileFn): void {
+  compileUcSerializer(task: UctCompileSerializerFn): void {
     (this.#ucsModels ??= new EsCode()).write(this.#addModel(task));
   }
 
-  #addModel({ fnId, modelId, from }: UctCompileFn): EsSnippet {
+  #addModel({ fnId, modelId, from }: UctCompileSerializerFn): EsSnippet {
     const moduleName = from.endsWith('ts')
       ? from.slice(0, -2) + 'js'
       : from.endsWith('tsx')
       ? from.slice(0, -3) + '.js'
       : from;
-    const modulePath = path.relative(this.#lib.rootDir!, moduleName);
+    const modulePath = path.relative(this.#setup.tsRoot.rootDir!, moduleName);
     let moduleSpec = modulePath.replaceAll(path.sep, '/');
 
     if (!moduleSpec.startsWith('./') && !moduleSpec.startsWith('../')) {
@@ -114,7 +131,7 @@ export class UctBundle {
             code
               .write(esline`await ${writeFile}(`)
               .indent(code => {
-                code.write(esStringLiteral(this.#dist) + ',').line(code => {
+                code.write(esStringLiteral(this.#distFile) + ',').line(code => {
                   code.multiLine(code => {
                     const generate = esImport('esgen', 'esGenerate');
 

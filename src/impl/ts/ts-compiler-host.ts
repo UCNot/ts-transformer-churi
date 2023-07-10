@@ -1,7 +1,7 @@
 import ts from 'typescript';
-import { UctVfs } from './uct-vfs.js';
+import { TsVfs } from './ts-vfs.js';
 
-export function wrapUctCompilerHost(host: ts.CompilerHost, vfs: UctVfs = {}): ts.CompilerHost {
+export function wrapTsCompilerHost(host: ts.CompilerHost, vfs: TsVfs = {}): ts.CompilerHost {
   const { useCaseSensitiveFileNames } = host;
 
   return {

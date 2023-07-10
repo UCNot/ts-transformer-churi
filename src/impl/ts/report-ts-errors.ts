@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-export function reportErrors(
+export function reportTsErrors(
   host: ts.FormatDiagnosticsHost,
   diagnostics: readonly ts.Diagnostic[],
 ): boolean {
