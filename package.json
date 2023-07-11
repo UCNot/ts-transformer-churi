@@ -1,6 +1,6 @@
 {
   "name": "ts-transformer-churi",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Compile ChURI models along TypeScript code",
   "keywords": [
     "charged-uri",
