@@ -21,21 +21,23 @@ export class ChuriTsLib {
 
     const { moduleSpecifier } = node;
 
-    if (this.#isChuriSpecifier(moduleSpecifier)) {
-      this.#referChuri(moduleSpecifier);
+    if (this.#isLibSpecifier(moduleSpecifier)) {
+      this.#refer(moduleSpecifier);
     }
   }
 
-  #isChuriSpecifier(
-    node: ts.Expression | ts.ExportSpecifier | undefined,
-  ): node is ts.StringLiteral {
+  #isLibSpecifier(node: ts.Expression | ts.ExportSpecifier | undefined): node is ts.StringLiteral {
     return !!node && ts.isStringLiteral(node) && node.text === 'churi';
   }
 
-  #referChuri(node: ts.Expression | ts.ExportSpecifier): void {
-    const moduleSymbol = this.#typeChecker.getSymbolAtLocation(node)!;
+  #refer(moduleSpecifier: ts.Expression | ts.ExportSpecifier): void {
+    const moduleSymbol = this.#typeChecker.getSymbolAtLocation(moduleSpecifier)!;
 
     this.#exports = {
+      createUcBundle: this.#typeChecker.tryGetMemberInModuleExports(
+        'createUcBundle',
+        moduleSymbol,
+      )!,
       createUcDeserializer: this.#typeChecker.tryGetMemberInModuleExports(
         'createUcDeserializer',
         moduleSymbol,
@@ -50,6 +52,7 @@ export class ChuriTsLib {
 }
 
 export interface ChuriLibExports {
+  readonly createUcBundle: ts.Symbol;
   readonly createUcDeserializer: ts.Symbol;
   readonly createUcSerializer: ts.Symbol;
 }

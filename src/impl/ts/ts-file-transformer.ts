@@ -1,12 +1,14 @@
 import ts from 'typescript';
+import { TsContextTransformer } from './ts-context-transformer.js';
 import { TsFileEditor } from './ts-file-editor.js';
 
-export class TsFileTransformer {
+export class TsFileTransformer extends TsContextTransformer {
 
   readonly #editor: TsFileEditor;
   readonly #imports: ts.ImportDeclaration[] = [];
 
   constructor(editor: TsFileEditor) {
+    super();
     this.#editor = editor;
   }
 

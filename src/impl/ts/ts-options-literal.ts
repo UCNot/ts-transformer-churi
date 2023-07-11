@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import { TsSetup } from './ts-setup.js';
+import { TsError } from './ts.error.js';
 
 export class TsOptionsLiteral {
 
@@ -8,9 +9,9 @@ export class TsOptionsLiteral {
   readonly #node: ts.ObjectLiteralExpression | undefined;
   readonly #options: { [name: string]: TsOptionValue } = {};
 
-  constructor(setup: TsSetup, target: string, node?: ts.Node) {
+  constructor(setup: TsSetup, target: string, node?: ts.Expression) {
     if (node && !ts.isObjectLiteralExpression(node)) {
-      throw new Error(`${target} options have to be passed as object literal`);
+      throw new TsError(`${target} options have to be passed as object literal`, { node });
     }
 
     this.#setup = setup;
@@ -20,10 +21,10 @@ export class TsOptionsLiteral {
     if (node) {
       for (const option of node.properties) {
         if (
-          !ts.isPropertyAssignment(option)
+          !(ts.isPropertyAssignment(option) || ts.isMethodDeclaration(option))
           || (!ts.isIdentifier(option.name) && !ts.isLiteralExpression(option.name))
         ) {
-          throw new Error(`Can not extract ${target} option`);
+          throw new TsError(`Can not extract ${target} option`, { node: option });
         }
 
         const name = option.name.text;
@@ -54,20 +55,42 @@ export class TsOptionsLiteral {
 export class TsOptionValue {
 
   readonly #options: TsOptionsLiteral;
-  readonly #node: ts.PropertyAssignment;
+  readonly #node: ts.PropertyAssignment | ts.MethodDeclaration;
   #name: string;
 
-  constructor(options: TsOptionsLiteral, name: string, node: ts.PropertyAssignment) {
+  constructor(
+    options: TsOptionsLiteral,
+    name: string,
+    node: ts.PropertyAssignment | ts.MethodDeclaration,
+  ) {
     this.#options = options;
     this.#name = name;
     this.#node = node;
+  }
+
+  get #valueNode(): ts.Node {
+    const { node } = this;
+
+    return ts.isPropertyAssignment(node) ? node.initializer : node.name;
+  }
+
+  get #initializer(): ts.Expression | undefined {
+    const { node } = this;
+
+    return ts.isPropertyAssignment(node) ? node.initializer : undefined;
+  }
+
+  get node(): ts.PropertyAssignment | ts.MethodDeclaration {
+    return this.#node;
   }
 
   getSymbol(): ts.Symbol | undefined {
     const symbol = this.#resolveSymbol();
 
     if (!symbol) {
-      throw new Error(`Can not resolve option ${this.#name} in ${this.#options.target}`);
+      throw new TsError(`Can not resolve option ${this.#name} in ${this.#options.target}`, {
+        node: this.#valueNode,
+      });
     }
 
     return this.#isUndefined(symbol) ? undefined : symbol;
@@ -75,8 +98,9 @@ export class TsOptionValue {
 
   #resolveSymbol(): ts.Symbol | undefined {
     const { setup } = this.#options;
+    const initializer = this.#initializer;
 
-    return setup.resolveSymbolAtLocation(this.#node.initializer);
+    return initializer && setup.resolveSymbolAtLocation(initializer);
   }
 
   #isUndefined(symbol: ts.Symbol): boolean {
@@ -90,47 +114,49 @@ export class TsOptionValue {
       return value;
     }
 
-    throw new Error(
+    throw new TsError(
       `Value of option ${this.#name} in ${this.#options.target} expected to be a string constant`,
+      { node: this.#valueNode },
     );
   }
 
   getValue(): string | number | undefined {
-    const { initializer } = this.#node;
+    const initializer = this.#initializer;
 
-    if (ts.isStringLiteralLike(initializer)) {
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      const getValue = new Function(`return ${initializer.text};`);
-
-      return getValue();
-    }
-    if (ts.isNumericLiteral(initializer)) {
-      return Number(initializer.text);
-    }
-
-    const {
-      setup: { typeChecker },
-    } = this.#options;
-
-    if (
-      ts.isPropertyAccessExpression(initializer)
-      || ts.isElementAccessExpression(initializer)
-      || ts.isEnumMember(initializer)
-    ) {
-      const value = typeChecker.getConstantValue(initializer);
-
-      if (value !== undefined) {
-        return value;
+    if (initializer) {
+      if (ts.isStringLiteralLike(initializer)) {
+        return initializer.text;
       }
-    } else {
-      const symbol = this.#resolveSymbol();
+      if (ts.isNumericLiteral(initializer)) {
+        return Number(initializer.text);
+      }
 
-      if (symbol && this.#isUndefined(symbol)) {
-        return undefined;
+      const {
+        setup: { typeChecker },
+      } = this.#options;
+
+      if (
+        ts.isPropertyAccessExpression(initializer)
+        || ts.isElementAccessExpression(initializer)
+        || ts.isEnumMember(initializer)
+      ) {
+        const value = typeChecker.getConstantValue(initializer);
+
+        if (value !== undefined) {
+          return value;
+        }
+      } else {
+        const symbol = this.#resolveSymbol();
+
+        if (symbol && this.#isUndefined(symbol)) {
+          return undefined;
+        }
       }
     }
 
-    throw new Error(`Can not resolve value of option ${this.#name} in ${this.#options.target}`);
+    throw new TsError(`Can not resolve value of option ${this.#name} in ${this.#options.target}`, {
+      node: this.#valueNode,
+    });
   }
 
 }

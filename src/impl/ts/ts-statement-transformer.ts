@@ -1,12 +1,14 @@
 import ts from 'typescript';
+import { TsContextTransformer } from './ts-context-transformer.js';
 import { TsFileEditor } from './ts-file-editor.js';
 import { TsFileTransformer } from './ts-file-transformer.js';
 
-export class TsStatementTransformer {
+export class TsStatementTransformer extends TsContextTransformer {
 
   readonly #prefix: ts.Statement[] = [];
 
   constructor(readonly fileTfm: TsFileTransformer, readonly statement: ts.Statement) {
+    super(fileTfm);
     this.fileTfm = fileTfm;
   }
 

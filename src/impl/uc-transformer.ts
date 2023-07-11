@@ -1,5 +1,6 @@
 import { UcDeserializer } from 'churi';
 import { EsNameRegistry } from 'esgen';
+import { capitalize } from 'httongue';
 import path from 'node:path';
 import ts from 'typescript';
 import { TsFileEditor } from './ts/ts-file-editor.js';
@@ -7,6 +8,7 @@ import { TsFileTransformer } from './ts/ts-file-transformer.js';
 import { TsOptionsLiteral } from './ts/ts-options-literal.js';
 import { TsRoot } from './ts/ts-root.js';
 import { TsStatementTransformer } from './ts/ts-statement-transformer.js';
+import { TsError } from './ts/ts.error.js';
 import { UctBundleRegistry } from './uct-bundle-registry.js';
 import { UctBundle } from './uct-bundle.js';
 import { UctLib } from './uct-lib.js';
@@ -39,19 +41,27 @@ export class UcTransformer {
     sourceFile: ts.SourceFile,
     context: ts.TransformationContext,
   ): ts.SourceFile {
-    const editor = new TsFileEditor(sourceFile, context);
-    const fileTfm = new TsFileTransformer(editor);
-    let result = ts.visitNode(sourceFile, node => this.#transform(node, fileTfm)) as ts.SourceFile;
+    try {
+      const editor = new TsFileEditor(sourceFile, context);
+      const fileTfm = new TsFileTransformer(editor);
+      let result = ts.visitNode(sourceFile, node => this.#transform(node, fileTfm)) as ts.SourceFile;
 
-    result = fileTfm.transform(result);
-    if (result !== sourceFile) {
-      const emittedFile = editor.emitFile();
+      result = fileTfm.transform(result);
+      if (result !== sourceFile) {
+        const emittedFile = editor.emitFile();
 
-      this.#tsRoot.updateRootDir(emittedFile);
-      this.#tasks.replaceSourceFile(emittedFile);
+        this.#tsRoot.updateRootDir(emittedFile);
+        this.#tasks.replaceSourceFile(emittedFile);
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof TsError) {
+        error.report(this.#setup);
+      }
+
+      throw error;
     }
-
-    return result;
   }
 
   #transform(node: ts.Node, fileTfm: TsFileTransformer): ts.Node | ts.Node[] {
@@ -121,23 +131,51 @@ export class UcTransformer {
     }
 
     switch (callee) {
+      case churiExports.createUcBundle:
+        return this.#configureBundle(node, stTfm);
       case churiExports.createUcDeserializer:
-        return this.#createDeserializer(callee, node, stTfm);
+        return this.#createDeserializer('deserializer', node, stTfm);
       case churiExports.createUcSerializer:
-        return this.#createSerializer(callee, node, stTfm);
+        return this.#createSerializer('serializer', node, stTfm);
     }
 
     return;
   }
 
+  #configureBundle(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
+    const constDecl = this.#setup.findConstDeclaration(node);
+
+    if (!constDecl) {
+      throw new TsError(`Bundle expected to be declared as top-level constant`, {
+        node,
+      });
+    }
+
+    const symbol = this.#setup.resolveSymbolAtLocation(constDecl.name);
+    const bundle = this.#bundleRegistry.getBundle(symbol ?? constDecl.name);
+    const { options } = new TsOptionsLiteral(
+      this.#setup,
+      symbol?.name ?? 'bundle',
+      node.arguments[0],
+    );
+
+    bundle.configure({
+      distFile: options.dist.getString(),
+    });
+
+    stTfm.setAttr(UctBundle, bundle);
+
+    return this.#eachExpression(node, stTfm);
+  }
+
   #createDeserializer(
-    callee: ts.Symbol,
+    target: string,
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
   ): ts.Node {
-    const options = this.#extractCompilerOptions(callee, node);
+    const options = this.#extractCompilerOptions(target, node);
     const bundle = this.#bundleRegistry.resolveBundle(options);
-    const { replacement, fnId, modelId } = this.#extractModel(bundle, node, stTfm, 'readValue');
+    const { replacement, fnId, modelId } = this.#extractModel(target, node, stTfm, 'readValue');
 
     this.#tasks.compileUcDeserializer({
       bundle: bundle,
@@ -151,13 +189,16 @@ export class UcTransformer {
   }
 
   #createSerializer(
-    callee: ts.Symbol,
+    target: string,
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
   ): ts.Node {
-    const options = this.#extractCompilerOptions(callee, node);
-    const bundle = this.#bundleRegistry.resolveBundle(options);
-    const { replacement, fnId, modelId } = this.#extractModel(bundle, node, stTfm, 'writeValue');
+    const { replacement, bundle, fnId, modelId } = this.#extractModel(
+      target,
+      node,
+      stTfm,
+      'writeValue',
+    );
 
     this.#tasks.compileUcSerializer({
       bundle,
@@ -169,26 +210,23 @@ export class UcTransformer {
     return replacement;
   }
 
-  #extractCompilerOptions(callee: ts.Symbol, node: ts.CallExpression): TsOptionsLiteral {
-    return new TsOptionsLiteral(
-      this.#setup,
-      callee.name,
-      node.arguments.length > 1 ? node.arguments[1] : undefined,
-    );
+  #extractCompilerOptions(target: string, node: ts.CallExpression): TsOptionsLiteral {
+    return new TsOptionsLiteral(this.#setup, target, node.arguments[1]);
   }
 
   #extractModel(
-    bundle: UctBundle,
+    target: string,
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
     suffix: string,
   ): {
     readonly replacement: ts.Node;
+    readonly bundle: UctBundle;
     readonly fnId: string;
     readonly modelId: ts.Identifier;
   } {
     const { factory, sourceFile, fileTfm, editor } = stTfm;
-    const { modelId, fnId } = this.#createIds(node, stTfm, suffix);
+    const { bundle, modelId, fnId } = this.#createModelIds(target, node, stTfm, suffix);
 
     stTfm.addPrefix(
       factory.createVariableStatement(
@@ -200,7 +238,7 @@ export class UcTransformer {
       ),
     );
 
-    const fnAlias = factory.createUniqueName(fnId);
+    const replacement = factory.createUniqueName(fnId);
 
     fileTfm.addImport(
       factory.createImportDeclaration(
@@ -209,11 +247,12 @@ export class UcTransformer {
           false,
           undefined,
           factory.createNamedImports([
-            factory.createImportSpecifier(false, factory.createIdentifier(fnId), fnAlias),
+            factory.createImportSpecifier(false, factory.createIdentifier(fnId), replacement),
           ]),
         ),
         factory.createStringLiteral(
           path.relative(path.dirname(sourceFile.fileName), bundle.distFile),
+          true,
         ),
       ),
     );
@@ -223,28 +262,41 @@ export class UcTransformer {
         ...node.arguments.slice(1),
       ]));
 
-    return { replacement: fnAlias, fnId, modelId };
+    return { replacement, bundle, fnId, modelId };
   }
 
-  #createIds(
-    { parent }: ts.CallExpression,
-    { factory }: TsStatementTransformer,
+  #createModelIds(
+    target: string,
+    node: ts.CallExpression,
+    stTfm: TsStatementTransformer,
     suggested: string,
-  ): { modelId: ts.Identifier; fnId: string } {
-    if (ts.isVariableDeclaration(parent)) {
-      const { name } = parent;
+  ): { bundle: UctBundle; modelId: ts.Identifier; fnId: string } {
+    let bundle = stTfm.getAttr(UctBundle);
+    let symbol: ts.Symbol | undefined;
 
-      if (ts.isIdentifier(name)) {
-        return {
-          modelId: factory.createIdentifier(UC_MODEL_PREFIX + name.text + UC_MODEL_SUFFIX),
-          fnId: this.#ns.reserveName(name.text),
-        };
+    if (bundle) {
+      symbol = this.#setup.typeChecker.getSymbolAtLocation(node);
+    } else {
+      const constDecl = this.#setup.findConstDeclaration(node);
+
+      if (constDecl) {
+        symbol = this.#setup.typeChecker.getSymbolAtLocation(constDecl.name);
+      } else {
+        throw new TsError(`${capitalize(target)} expected to be declared as top-level constant`, {
+          node,
+        });
       }
+
+      bundle = this.#setup.bundleRegistry.defaultBundle;
     }
 
+    const name = symbol?.name ?? this.#setup.guessName(node);
+    const fnId = name ?? this.#ns.reserveName(suggested);
+
     return {
-      modelId: factory.createIdentifier(UC_MODEL_PREFIX + UC_MODEL_SUFFIX),
-      fnId: this.#ns.reserveName(suggested),
+      bundle,
+      modelId: stTfm.factory.createIdentifier(UC_PREFIX + (name ?? fnId) + UC_MODEL_SUFFIX),
+      fnId,
     };
   }
 
@@ -257,5 +309,5 @@ export interface UcTransformerInit {
   readonly tasks?: UctTasks | undefined;
 }
 
-const UC_MODEL_PREFIX = '\u2c1f';
+const UC_PREFIX = '\u2c1f';
 const UC_MODEL_SUFFIX = '$$uc$model';

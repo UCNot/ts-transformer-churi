@@ -10,8 +10,6 @@ import {
   esline,
 } from 'esgen';
 import path from 'node:path';
-import ts from 'typescript';
-import { TsOptionsLiteral } from './ts/ts-options-literal.js';
 import { UctSetup } from './uct-setup.js';
 import { UctCompileSerializerFn } from './uct-tasks.js';
 
@@ -31,15 +29,13 @@ export class UctBundle {
     return this.#distFile;
   }
 
-  configure(sourceFile: ts.SourceFile, symbol: ts.Symbol, node: ts.Node): void {
-    const { options } = new TsOptionsLiteral(this.#setup, symbol.name, node);
-    const dist = options.dist.getString();
-
-    if (dist != null) {
-      this.#distFile = path.resolve(sourceFile.fileName, dist);
+  configure({ distFile }: { readonly distFile?: string | undefined }): void {
+    if (distFile != null) {
+      this.#distFile = path.resolve(
+        path.dirname(this.#setup.bundleRegistry.defaultBundle.distFile),
+        distFile,
+      );
     }
-
-    // TODO extract bundle data
   }
 
   compileUcDeserializer(task: UctCompileSerializerFn): void {
@@ -51,18 +47,7 @@ export class UctBundle {
   }
 
   #addModel({ fnId, modelId, from }: UctCompileSerializerFn): EsSnippet {
-    const moduleName = from.endsWith('ts')
-      ? from.slice(0, -2) + 'js'
-      : from.endsWith('tsx')
-      ? from.slice(0, -3) + '.js'
-      : from;
-    const modulePath = path.relative(this.#setup.tsRoot.rootDir!, moduleName);
-    let moduleSpec = modulePath.replaceAll(path.sep, '/');
-
-    if (!moduleSpec.startsWith('./') && !moduleSpec.startsWith('../')) {
-      moduleSpec = './' + moduleSpec;
-    }
-
+    const moduleSpec = this.#setup.relativeImport(this.#setup.tsRoot.rootDir!, from);
     const model = esImport(moduleSpec, modelId.text);
 
     return esline`${fnId}: ${model},`;

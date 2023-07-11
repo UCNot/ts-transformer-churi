@@ -1,3 +1,4 @@
+import { EsNameRegistry } from 'esgen';
 import { hyphenate } from 'httongue';
 import path from 'node:path';
 import ts from 'typescript';
@@ -7,9 +8,10 @@ import { UctSetup } from './uct-setup.js';
 
 export class UctBundleRegistry {
 
+  readonly #ns = new EsNameRegistry();
   readonly #setup: UctSetup;
   #defaultBundle?: UctBundle;
-  readonly #bundles = new Map<ts.Symbol, UctBundle>();
+  readonly #bundles = new Map<ts.Symbol | ts.BindingName, UctBundle>();
 
   constructor(setup: UctSetup) {
     this.#setup = setup;
@@ -25,24 +27,25 @@ export class UctBundleRegistry {
     return new UctBundle(this.#setup, dist);
   }
 
-  resolveBundle({ options: { bundle } }: TsOptionsLiteral): UctBundle {
-    const symbol = bundle?.getSymbol();
-
-    if (!symbol) {
-      return this.defaultBundle;
-    }
-
+  getBundle(symbol: ts.Symbol | ts.BindingName): UctBundle {
     const found = this.#bundles.get(symbol);
 
     if (found) {
       return found;
     }
 
-    const newBundle = new UctBundle(this.#setup, this.#guessUctDist(hyphenate(symbol.name)));
+    const { name } = symbol as Partial<ts.Symbol>;
+    const newBundle = new UctBundle(this.#setup, this.#guessUctDist(name && hyphenate(name)));
 
     this.#bundles.set(symbol, newBundle);
 
     return newBundle;
+  }
+
+  resolveBundle({ options: { bundle } }: TsOptionsLiteral): UctBundle {
+    const symbol = bundle?.getSymbol();
+
+    return symbol ? this.getBundle(symbol) : this.defaultBundle;
   }
 
   *bundles(): IterableIterator<UctBundle> {
@@ -53,6 +56,13 @@ export class UctBundleRegistry {
   }
 
   #guessUctDist(bundleName?: string): string {
+    if (!bundleName) {
+      bundleName = this.#ns.reserveName('bundle');
+      if (bundleName === 'bundle') {
+        bundleName = undefined;
+      }
+    }
+
     const { type, mainEntryPoint } = this.#setup.packageInfo;
     const indexFile = mainEntryPoint?.findJs(type);
     let indexName: string;

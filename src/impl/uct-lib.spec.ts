@@ -162,5 +162,36 @@ export const writeValue = createUcSerializer(String);
       expect(file).toContain('export function readValue(');
       expect(file).toContain('export async function writeValue(');
     });
+    it('emits multiple libs', async () => {
+      transform(
+        {
+          'model.ts': `
+import { createUcBundle, createUcDeserializer, createUcSerializer } from 'churi';
+
+export const readString = createUcDeserializer(String);
+export const { writeString } = createUcBundle({
+  dist: './custom.uc-lib.js',
+  bundle() {
+    return {
+      writeString: createUcSerializer(String),
+    };
+  },
+});
+        `,
+        },
+        createUcTransformer,
+      );
+
+      await lib.compile();
+
+      const file1 = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
+      const file2 = await fs.readFile(`${testDir}/custom.uc-lib.js`, 'utf-8');
+
+      expect(file1).toContain('export function readString(');
+      expect(file1).not.toContain('export async function writeString(');
+
+      expect(file2).not.toContain('export function readString(');
+      expect(file2).toContain('export async function writeString(');
+    });
   });
 });

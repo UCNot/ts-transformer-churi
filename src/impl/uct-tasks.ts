@@ -8,6 +8,13 @@ export interface UctTasks {
   compileUcSerializer(task: UctCompileSerializerFn): void;
 }
 
+export interface UctCompileBundleData {
+  readonly bundle: UctBundle;
+  readonly fnId: string;
+  readonly dataId: ts.Identifier;
+  readonly from: string;
+}
+
 export interface UctCompileDeserializerFn {
   readonly bundle: UctBundle;
   readonly fnId: string;

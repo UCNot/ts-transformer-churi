@@ -60,6 +60,79 @@ export class TsSetup {
     return this.#libs;
   }
 
+  getSourceFile(node: ts.Node): ts.SourceFile {
+    return ts.isSourceFile(node) ? node : this.getSourceFile(node.parent);
+  }
+
+  buildDiagnosticsForNode(node: ts.Node, messageText: string): ts.DiagnosticWithLocation {
+    const file = this.getSourceFile(node);
+
+    return {
+      category: ts.DiagnosticCategory.Error,
+      code: 9999,
+      source: file.fileName,
+      file,
+      start: node.pos,
+      length: node.end - node.pos,
+      messageText,
+    };
+  }
+
+  findConstDeclaration(node: ts.Node): ts.VariableDeclaration | undefined {
+    const { parent } = node;
+
+    if (!parent) {
+      return;
+    }
+    if (ts.isVariableDeclaration(parent)) {
+      const varDeclList = parent.parent;
+      const varStatement = varDeclList?.parent;
+
+      return ts.isVariableDeclarationList(varDeclList)
+        && ts.isVariableStatement(varStatement)
+        && varDeclList.flags & ts.NodeFlags.Const
+        && ts.isSourceFile(varStatement.parent)
+        ? parent
+        : undefined;
+    }
+    if (ts.isParenthesizedExpression(parent)) {
+      return this.findConstDeclaration(parent.parent);
+    }
+
+    return;
+  }
+
+  guessName(node: ts.Node): string | undefined {
+    if (ts.isIdentifier(node)) {
+      return node.text;
+    }
+    if (ts.isVariableDeclaration(node)) {
+      const symbol = this.#typeChecker.getSymbolAtLocation(node.name);
+
+      return symbol && symbol.name;
+    }
+    if (ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) {
+      const { name } = node;
+
+      if (ts.isComputedPropertyName(name)) {
+        const { expression } = name;
+
+        if (ts.isStringLiteral(expression) || ts.isNumericLiteral(expression)) {
+          return expression.text;
+        }
+
+        return;
+      }
+
+      return name.text;
+    }
+    if (ts.isExpression(node)) {
+      return this.guessName(node.parent);
+    }
+
+    return;
+  }
+
   resolveSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
     const symbol = this.#typeChecker.getSymbolAtLocation(node);
 
@@ -68,6 +141,23 @@ export class TsSetup {
     }
 
     return symbol;
+  }
+
+  relativeImport(relativeTo: string, modulePath: string): string {
+    const moduleName = modulePath.endsWith('ts')
+      ? modulePath.slice(0, -2) + 'js'
+      : modulePath.endsWith('tsx')
+      ? modulePath.slice(0, -3) + '.js'
+      : modulePath;
+
+    const result = path.relative(relativeTo, moduleName);
+    const moduleSpec = result.replaceAll(path.sep, '/');
+
+    if (!moduleSpec.startsWith('./') && !moduleSpec.startsWith('../')) {
+      return './' + moduleSpec;
+    }
+
+    return moduleSpec;
   }
 
   async createTempDir(): Promise<string> {
