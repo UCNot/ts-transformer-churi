@@ -10,7 +10,7 @@ export default function createUcTransformer(
   program: ts.Program,
   options?: UcTransformerOptions,
 ): ts.TransformerFactory<ts.SourceFile> {
-  const setup = new UctSetup(program, undefined, options);
+  const setup = new UctSetup({ program, ...options });
 
   return new UcTransformer(setup, new UctLib(setup)).createTransformerFactory();
 }

@@ -31,7 +31,8 @@
   "dependencies": {
     "@proc7ts/primitives": "4.0.1",
     "@run-z/npk": "^0.6.0",
-    "esgen": "^0.2.9"
+    "esgen": "^0.2.9",
+    "httongue": "^3.1.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.6.1",
@@ -43,7 +44,7 @@
     "@types/node": "^18.16.19",
     "@typescript-eslint/eslint-plugin": "^5.61.0",
     "@typescript-eslint/parser": "^5.61.0",
-    "churi": "^0.11.0",
+    "churi": "^0.12.0",
     "eslint": "^8.44.0",
     "eslint-plugin-jest": "^27.2.2",
     "gh-pages": "^5.0.0",
