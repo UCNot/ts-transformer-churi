@@ -8,16 +8,8 @@ export class TsStatementTransformer extends TsContextTransformer {
   readonly #prefix: ts.Statement[] = [];
 
   constructor(readonly fileTfm: TsFileTransformer, readonly statement: ts.Statement) {
-    super(fileTfm);
+    super(fileTfm.context);
     this.fileTfm = fileTfm;
-  }
-
-  get context(): ts.TransformationContext {
-    return this.fileTfm.context;
-  }
-
-  get factory(): ts.NodeFactory {
-    return this.context.factory;
   }
 
   get sourceFile(): ts.SourceFile {

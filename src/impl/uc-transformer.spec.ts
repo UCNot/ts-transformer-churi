@@ -83,16 +83,10 @@ export const readNumber = createDeserializer(Number);
       const output = transform(
         {
           'create-serializer.ts': `
-  import { createUcBundle, createUcSerializer } from 'churi';
+import { createUcBundle, createUcSerializer } from 'churi';
 
-  export const { writeNumber } = createUcBundle({
-    dist: 'custom-bundle.js',
-    bundle() {
-      return {
-        writeNumber: createUcSerializer(Number),
-      };
-    },
-  });
+const customBundle = createUcBundle();
+export const writeNumber = createUcSerializer(Number, { bundle: customBundle });
   `,
         },
         createUcTransformer,
@@ -103,8 +97,8 @@ export const readNumber = createDeserializer(Number);
       const { bundle } = tasks.compileUcSerializer.mock.calls[0][0];
 
       expect(bundle).not.toBe(setup.bundleRegistry.defaultBundle);
-      expect(bundle.distFile).toContain('custom-bundle.js');
-      expect(output).toContain('/dist/custom-bundle.js');
+      expect(bundle.distFile).toContain('.custom-bundle.uc-lib.js');
+      expect(output).toContain('.custom-bundle.uc-lib.js');
     });
   });
 });

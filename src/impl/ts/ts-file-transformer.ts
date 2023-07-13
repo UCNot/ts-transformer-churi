@@ -8,16 +8,8 @@ export class TsFileTransformer extends TsContextTransformer {
   readonly #imports: ts.ImportDeclaration[] = [];
 
   constructor(editor: TsFileEditor) {
-    super();
+    super(editor.context);
     this.#editor = editor;
-  }
-
-  get context(): ts.TransformationContext {
-    return this.#editor.context;
-  }
-
-  get factory(): ts.NodeFactory {
-    return this.context.factory;
   }
 
   get sourceFile(): ts.SourceFile {

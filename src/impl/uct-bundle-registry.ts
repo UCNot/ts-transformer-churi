@@ -11,7 +11,7 @@ export class UctBundleRegistry {
   readonly #ns = new EsNameRegistry();
   readonly #setup: UctSetup;
   #defaultBundle?: UctBundle;
-  readonly #bundles = new Map<ts.Symbol | ts.BindingName, UctBundle>();
+  readonly #bundles = new Map<ts.Symbol, UctBundle>();
 
   constructor(setup: UctSetup) {
     this.#setup = setup;
@@ -27,15 +27,14 @@ export class UctBundleRegistry {
     return new UctBundle(this.#setup, dist);
   }
 
-  getBundle(symbol: ts.Symbol | ts.BindingName): UctBundle {
+  getBundle(symbol: ts.Symbol): UctBundle {
     const found = this.#bundles.get(symbol);
 
     if (found) {
       return found;
     }
 
-    const { name } = symbol as Partial<ts.Symbol>;
-    const newBundle = new UctBundle(this.#setup, this.#guessUctDist(name && hyphenate(name)));
+    const newBundle = new UctBundle(this.#setup, this.#guessUctDist(hyphenate(symbol.name)));
 
     this.#bundles.set(symbol, newBundle);
 

@@ -132,7 +132,7 @@ export class UcTransformer {
 
     switch (callee) {
       case churiExports.createUcBundle:
-        return this.#configureBundle(node, stTfm);
+        return this.#configureBundle(node);
       case churiExports.createUcDeserializer:
         return this.#createDeserializer('deserializer', node, stTfm);
       case churiExports.createUcSerializer:
@@ -142,30 +142,24 @@ export class UcTransformer {
     return;
   }
 
-  #configureBundle(node: ts.CallExpression, stTfm: TsStatementTransformer): ts.Node {
+  #configureBundle(node: ts.CallExpression): ts.Node {
     const constDecl = this.#setup.findConstDeclaration(node);
+    const symbol = constDecl && this.#setup.resolveSymbolAtLocation(constDecl.name);
 
-    if (!constDecl) {
+    if (!symbol) {
       throw new TsError(`Bundle expected to be declared as top-level constant`, {
         node,
       });
     }
 
-    const symbol = this.#setup.resolveSymbolAtLocation(constDecl.name);
-    const bundle = this.#bundleRegistry.getBundle(symbol ?? constDecl.name);
-    const { options } = new TsOptionsLiteral(
-      this.#setup,
-      symbol?.name ?? 'bundle',
-      node.arguments[0],
-    );
+    const bundle = this.#bundleRegistry.getBundle(symbol);
+    const { options } = new TsOptionsLiteral(this.#setup, symbol.name, node.arguments[0]);
 
     bundle.configure({
       distFile: options.dist.getString(),
     });
 
-    stTfm.setAttr(UctBundle, bundle);
-
-    return this.#eachExpression(node, stTfm);
+    return node;
   }
 
   #createDeserializer(
@@ -173,16 +167,22 @@ export class UcTransformer {
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
   ): ts.Node {
-    const options = this.#extractCompilerOptions(target, node);
-    const bundle = this.#bundleRegistry.resolveBundle(options);
-    const { replacement, fnId, modelId } = this.#extractModel(target, node, stTfm, 'readValue');
+    const compilerConfig = new TsOptionsLiteral(this.#setup, target, node.arguments[1]);
+    const bundle = this.#bundleRegistry.resolveBundle(compilerConfig);
+    const { replacement, fnId, modelId } = this.#extractModel(
+      bundle,
+      target,
+      node,
+      stTfm,
+      'readValue',
+    );
 
     this.#tasks.compileUcDeserializer({
-      bundle: bundle,
+      bundle,
       fnId,
       modelId,
       from: stTfm.sourceFile.fileName,
-      mode: (options.options.mode?.getString() as UcDeserializer.Mode) ?? 'universal',
+      mode: (compilerConfig.options.mode?.getString() as UcDeserializer.Mode) ?? 'universal',
     });
 
     return replacement;
@@ -193,7 +193,10 @@ export class UcTransformer {
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
   ): ts.Node {
-    const { replacement, bundle, fnId, modelId } = this.#extractModel(
+    const compilerConfig = new TsOptionsLiteral(this.#setup, target, node.arguments[1]);
+    const bundle = this.#bundleRegistry.resolveBundle(compilerConfig);
+    const { replacement, fnId, modelId } = this.#extractModel(
+      bundle,
       target,
       node,
       stTfm,
@@ -210,23 +213,19 @@ export class UcTransformer {
     return replacement;
   }
 
-  #extractCompilerOptions(target: string, node: ts.CallExpression): TsOptionsLiteral {
-    return new TsOptionsLiteral(this.#setup, target, node.arguments[1]);
-  }
-
   #extractModel(
+    bundle: UctBundle,
     target: string,
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
     suffix: string,
   ): {
     readonly replacement: ts.Node;
-    readonly bundle: UctBundle;
     readonly fnId: string;
     readonly modelId: ts.Identifier;
   } {
     const { factory, sourceFile, fileTfm, editor } = stTfm;
-    const { bundle, modelId, fnId } = this.#createModelIds(target, node, stTfm, suffix);
+    const { modelId, fnId } = this.#createModelIds(target, node, stTfm, suffix);
 
     stTfm.addPrefix(
       factory.createVariableStatement(
@@ -262,7 +261,7 @@ export class UcTransformer {
         ...node.arguments.slice(1),
       ]));
 
-    return { replacement, bundle, fnId, modelId };
+    return { replacement, fnId, modelId };
   }
 
   #createModelIds(
@@ -270,32 +269,21 @@ export class UcTransformer {
     node: ts.CallExpression,
     stTfm: TsStatementTransformer,
     suggested: string,
-  ): { bundle: UctBundle; modelId: ts.Identifier; fnId: string } {
-    let bundle = stTfm.getAttr(UctBundle);
-    let symbol: ts.Symbol | undefined;
+  ): { modelId: ts.Identifier; fnId: string } {
+    const constDecl = this.#setup.findConstDeclaration(node);
+    const symbol = constDecl && this.#setup.resolveSymbolAtLocation(constDecl.name);
 
-    if (bundle) {
-      symbol = this.#setup.typeChecker.getSymbolAtLocation(node);
-    } else {
-      const constDecl = this.#setup.findConstDeclaration(node);
-
-      if (constDecl) {
-        symbol = this.#setup.typeChecker.getSymbolAtLocation(constDecl.name);
-      } else {
-        throw new TsError(`${capitalize(target)} expected to be declared as top-level constant`, {
-          node,
-        });
-      }
-
-      bundle = this.#setup.bundleRegistry.defaultBundle;
+    if (!symbol) {
+      throw new TsError(`${capitalize(target)} expected to be declared as top-level constant`, {
+        node,
+      });
     }
 
-    const name = symbol?.name ?? this.#setup.guessName(node);
+    const name = symbol.name;
     const fnId = name ?? this.#ns.reserveName(suggested);
 
     return {
-      bundle,
-      modelId: stTfm.factory.createIdentifier(UC_PREFIX + (name ?? fnId) + UC_MODEL_SUFFIX),
+      modelId: stTfm.factory.createIdentifier(UC_PREFIX + symbol.name + UC_MODEL_SUFFIX),
       fnId,
     };
   }
