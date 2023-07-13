@@ -168,15 +168,9 @@ export const writeValue = createUcSerializer(String);
           'model.ts': `
 import { createUcBundle, createUcDeserializer, createUcSerializer } from 'churi';
 
+export const bundle = createUcBundle({ dist: './custom.uc-lib.js' });
 export const readString = createUcDeserializer(String);
-export const { writeString } = createUcBundle({
-  dist: './custom.uc-lib.js',
-  bundle() {
-    return {
-      writeString: createUcSerializer(String),
-    };
-  },
-});
+export const writeString = createUcSerializer(String, { bundle });
         `,
         },
         createUcTransformer,

@@ -1,18 +1,19 @@
+import ts from 'typescript';
+
 export abstract class TsContextTransformer {
 
-  readonly #attrs = new Map<abstract new (...args: never[]) => unknown, unknown>();
-  #enclosing: TsContextTransformer | undefined;
+  readonly #context: ts.TransformationContext;
 
-  constructor(enclosing?: TsContextTransformer) {
-    this.#enclosing = enclosing;
+  constructor(context: ts.TransformationContext) {
+    this.#context = context;
   }
 
-  getAttr<T>(key: abstract new (...args: never[]) => T): T | undefined {
-    return (this.#attrs.get(key) as T | undefined) ?? this.#enclosing?.getAttr(key);
+  get context(): ts.TransformationContext {
+    return this.#context;
   }
 
-  setAttr<T>(key: abstract new (...args: never[]) => T, value: T): void {
-    this.#attrs.set(key, value);
+  get factory(): ts.NodeFactory {
+    return this.context.factory;
   }
 
 }

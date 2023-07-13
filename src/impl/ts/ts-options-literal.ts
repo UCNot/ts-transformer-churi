@@ -21,7 +21,11 @@ export class TsOptionsLiteral {
     if (node) {
       for (const option of node.properties) {
         if (
-          !(ts.isPropertyAssignment(option) || ts.isMethodDeclaration(option))
+          !(
+            ts.isPropertyAssignment(option)
+            || ts.isShorthandPropertyAssignment(option)
+            || ts.isMethodDeclaration(option)
+          )
           || (!ts.isIdentifier(option.name) && !ts.isLiteralExpression(option.name))
         ) {
           throw new TsError(`Can not extract ${target} option`, { node: option });
@@ -55,13 +59,13 @@ export class TsOptionsLiteral {
 export class TsOptionValue {
 
   readonly #options: TsOptionsLiteral;
-  readonly #node: ts.PropertyAssignment | ts.MethodDeclaration;
+  readonly #node: ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration;
   #name: string;
 
   constructor(
     options: TsOptionsLiteral,
     name: string,
-    node: ts.PropertyAssignment | ts.MethodDeclaration,
+    node: ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration,
   ) {
     this.#options = options;
     this.#name = name;
@@ -80,7 +84,7 @@ export class TsOptionValue {
     return ts.isPropertyAssignment(node) ? node.initializer : undefined;
   }
 
-  get node(): ts.PropertyAssignment | ts.MethodDeclaration {
+  get node(): ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration {
     return this.#node;
   }
 
@@ -97,7 +101,13 @@ export class TsOptionValue {
   }
 
   #resolveSymbol(): ts.Symbol | undefined {
+    const { node } = this;
     const { setup } = this.#options;
+
+    if (ts.isShorthandPropertyAssignment(node)) {
+      return setup.typeChecker.getShorthandAssignmentValueSymbol(node);
+    }
+
     const initializer = this.#initializer;
 
     return initializer && setup.resolveSymbolAtLocation(initializer);
