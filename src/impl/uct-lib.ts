@@ -6,7 +6,7 @@ import { wrapTsCompilerHost } from './ts/ts-compiler-host.js';
 import { TsVfs } from './ts/ts-vfs.js';
 import { UctBundleRegistry } from './uct-bundle-registry.js';
 import { UctSetup } from './uct-setup.js';
-import { UctCompileSerializerFn, UctTasks } from './uct-tasks.js';
+import { UctCompileDeserializerFn, UctCompileSerializerFn, UctTasks } from './uct-tasks.js';
 
 export class UctLib implements UctTasks {
 
@@ -28,7 +28,7 @@ export class UctLib implements UctTasks {
     this.#vfs[sourceFile.fileName] = text;
   }
 
-  compileUcDeserializer(task: UctCompileSerializerFn): void {
+  compileUcDeserializer(task: UctCompileDeserializerFn): void {
     this.#tasks.push(() => task.bundle.compileUcDeserializer(task));
   }
 

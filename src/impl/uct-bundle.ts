@@ -11,7 +11,7 @@ import {
 } from 'esgen';
 import path from 'node:path';
 import { UctSetup } from './uct-setup.js';
-import { UctCompileSerializerFn } from './uct-tasks.js';
+import { UctCompileDeserializerFn, UctCompileSerializerFn } from './uct-tasks.js';
 
 export class UctBundle {
 
@@ -38,15 +38,24 @@ export class UctBundle {
     }
   }
 
-  compileUcDeserializer(task: UctCompileSerializerFn): void {
-    (this.#ucdModels ??= new EsCode()).write(this.#addModel(task));
+  compileUcDeserializer(task: UctCompileDeserializerFn): void {
+    (this.#ucdModels ??= new EsCode()).write(this.#addDeserializer(task));
+  }
+
+  #addDeserializer({ fnId, modelId, from, mode }: UctCompileDeserializerFn): EsSnippet {
+    const moduleSpec = this.#setup.relativeImport(this.#setup.tsRoot.rootDir!, from);
+    const model = esImport(moduleSpec, modelId.text);
+
+    return mode === 'universal'
+      ? esline`${fnId}: ${model},`
+      : esline`${fnId}: [${esStringLiteral(mode)}, ${model}],`;
   }
 
   compileUcSerializer(task: UctCompileSerializerFn): void {
-    (this.#ucsModels ??= new EsCode()).write(this.#addModel(task));
+    (this.#ucsModels ??= new EsCode()).write(this.#addSerializer(task));
   }
 
-  #addModel({ fnId, modelId, from }: UctCompileSerializerFn): EsSnippet {
+  #addSerializer({ fnId, modelId, from }: UctCompileSerializerFn): EsSnippet {
     const moduleSpec = this.#setup.relativeImport(this.#setup.tsRoot.rootDir!, from);
     const model = esImport(moduleSpec, modelId.text);
 

@@ -169,7 +169,7 @@ export const writeValue = createUcSerializer(String);
 import { createUcBundle, createUcDeserializer, createUcSerializer } from 'churi';
 
 export const bundle = createUcBundle({ dist: './custom.uc-lib.js' });
-export const readString = createUcDeserializer(String);
+export const readString = createUcDeserializer(String, { mode: 'async' });
 export const writeString = createUcSerializer(String, { bundle });
         `,
         },
@@ -181,10 +181,10 @@ export const writeString = createUcSerializer(String, { bundle });
       const file1 = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
       const file2 = await fs.readFile(`${testDir}/custom.uc-lib.js`, 'utf-8');
 
-      expect(file1).toContain('export function readString(');
+      expect(file1).toContain('export async function readString(');
       expect(file1).not.toContain('export async function writeString(');
 
-      expect(file2).not.toContain('export function readString(');
+      expect(file2).not.toContain('export async function readString(');
       expect(file2).toContain('export async function writeString(');
     });
   });
