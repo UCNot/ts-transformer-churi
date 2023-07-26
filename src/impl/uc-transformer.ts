@@ -1,4 +1,4 @@
-import { UcDeserializer } from 'churi';
+import { UcDeserializer, UcFormatName } from 'churi';
 import { EsNameRegistry } from 'esgen';
 import { capitalize } from 'httongue';
 import path from 'node:path';
@@ -168,6 +168,7 @@ export class UcTransformer {
     stTfm: TsStatementTransformer,
   ): ts.Node {
     const compilerConfig = new TsOptionsLiteral(this.#setup, target, node.arguments[1]);
+    const { options } = compilerConfig;
     const bundle = this.#bundleRegistry.resolveBundle(compilerConfig);
     const { replacement, fnId, modelId } = this.#extractModel(
       bundle,
@@ -182,7 +183,8 @@ export class UcTransformer {
       fnId,
       modelId,
       from: stTfm.sourceFile.fileName,
-      mode: (compilerConfig.options.mode?.getString() as UcDeserializer.Mode) ?? 'universal',
+      mode: (options.mode?.getString() as UcDeserializer.Mode | undefined) ?? 'universal',
+      format: (options.from?.getString() as UcFormatName | undefined) ?? 'charge',
     });
 
     return replacement;
