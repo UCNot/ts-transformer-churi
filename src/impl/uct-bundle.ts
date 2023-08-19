@@ -118,7 +118,7 @@ export class UctBundle {
 
               compilers.push(ucdCompiler);
               code.write(
-                ucdCompiler.declare({
+                ucdCompiler.const({
                   value: () => code => {
                     code.multiLine(code => {
                       code
@@ -139,7 +139,7 @@ export class UctBundle {
 
               compilers.push(ucsCompiler);
               code.write(
-                ucsCompiler.declare({
+                ucsCompiler.const({
                   value: () => code => {
                     code.multiLine(code => {
                       code
