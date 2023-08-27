@@ -90,6 +90,7 @@ export class UctLib implements UctTasks {
       declaration: false,
       emitDeclarationOnly: false,
       module: ts.ModuleKind.ES2022,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
       noEmit: false,
       sourceMap: false,
       target: ts.ScriptTarget.ES2022,
