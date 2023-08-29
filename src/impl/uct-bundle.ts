@@ -1,4 +1,3 @@
-import { UcFormatName, UcPresentationName } from 'churi';
 import {
   EsCode,
   EsFunction,
@@ -18,7 +17,6 @@ export class UctBundle {
 
   readonly #setup: UctSetup;
   #distFile: string;
-  #presentations?: EsCode;
   #ucdModels?: EsCode;
   #ucsModels?: EsCode;
 
@@ -44,42 +42,20 @@ export class UctBundle {
     (this.#ucdModels ??= new EsCode()).write(this.#addDeserializer(task));
   }
 
-  #addDeserializer({ fnId, modelId, from, mode, format }: UctCompileDeserializerFn): EsSnippet {
+  #addDeserializer({ fnId, modelId, from, mode, byTokens }: UctCompileDeserializerFn): EsSnippet {
     const moduleSpec = this.#setup.relativeImport(this.#setup.tsRoot.rootDir!, from);
     const model = esImport(moduleSpec, modelId.text);
-    let lexerOptions: UctLexerOptions | undefined;
-
-    if (format !== 'tokens') {
-      lexerOptions = UCT_FORMAT_LEXERS[format];
-
-      this.#addPresentation(format);
-      this.#addPresentations(lexerOptions?.presentations);
-    }
 
     return code => {
       code
         .write(esline`${fnId}: {`)
-        .indent(code => {
-          code.write(esline`model: ${model},`).write(`mode: ${esStringLiteral(mode)},`);
-          if (lexerOptions) {
-            const { lexer, inset } = lexerOptions;
-
-            code.write(esline`lexer: ${lexer},`);
-            if (inset) {
-              code.write(esline`inset: ${inset},`);
-            }
-          }
-        })
+        .indent(
+          esline`model: ${model},`,
+          `mode: ${esStringLiteral(mode)},`,
+          `byTokens: ${byTokens},`,
+        )
         .write('}');
     };
-  }
-
-  #addPresentation(presentation: UcPresentationName): void {
-    (this.#presentations ??= new EsCode()).write(esStringLiteral(presentation) + ',');
-  }
-
-  #addPresentations(presentations: readonly UcPresentationName[] | undefined): void {
-    presentations?.forEach(presentation => this.#addPresentation(presentation));
   }
 
   compileUcSerializer(task: UctCompileSerializerFn): void {
@@ -90,7 +66,12 @@ export class UctBundle {
     const moduleSpec = this.#setup.relativeImport(this.#setup.tsRoot.rootDir!, from);
     const model = esImport(moduleSpec, modelId.text);
 
-    return esline`${fnId}: ${model},`;
+    return code => {
+      code
+        .write(esline`${fnId}: {`)
+        .indent(esline`model: ${model},`)
+        .write('},');
+    };
   }
 
   emitBundlerFn(): EsFunction<EsSignature.NoArgs> | undefined {
@@ -125,7 +106,6 @@ export class UctBundle {
                         .write(esline`new ${UcdCompiler}({`)
                         .indent(code => {
                           code.write(`models: {`).indent(ucdModels).write(`},`);
-                          code.write(this.#presentationsOption());
                         })
                         .write('})');
                     });
@@ -184,60 +164,4 @@ export class UctBundle {
     );
   }
 
-  #presentationsOption(): EsSnippet {
-    const presentations = this.#presentations;
-
-    if (!presentations) {
-      return EsCode.none;
-    }
-
-    return code => {
-      code.write(`presentations: [`).indent(presentations).write(`],`);
-    };
-  }
-
-}
-
-const UCT_FORMAT_LEXERS: {
-  readonly [format in UcFormatName]: UctLexerOptions;
-} = {
-  charge: {
-    lexer: createLexerOption('UcChargeLexer'),
-  },
-  plainText: {
-    lexer: createLexerOption('UcPlainTextLexer'),
-  },
-  uriEncoded: {
-    lexer: createLexerOption('UcURIEncodedLexer'),
-  },
-  uriParams: {
-    presentations: ['uriParam'],
-    lexer: createLexerOption('UcURIParamsLexer'),
-    inset: createLexerOption('UcChargeLexer'),
-  },
-};
-
-interface UctLexerOptions {
-  presentations?: readonly UcPresentationName[] | undefined;
-  readonly lexer: EsSnippet;
-  readonly inset?: EsSnippet | undefined;
-}
-
-function createLexerOption(lexer: string, from = 'churi'): EsSnippet {
-  return code => {
-    code
-      .write(esline`({ emit }) => code => {`)
-      .indent(code => {
-        const $esImport = esImport('esgen', 'esImport');
-
-        code
-          .write(
-            esline`const Lexer = ${$esImport}(${esStringLiteral(from)}, ${esStringLiteral(
-              lexer,
-            )});`,
-          )
-          .write(`code.line('return new ', Lexer, '(', emit, ');');`);
-      })
-      .write('}');
-  };
 }

@@ -125,53 +125,13 @@ export const readValue = createUcDeserializer(String);
       expect(file).toContain('export function readValue(');
       expect(file).toContain('new UcChargeLexer(');
     });
-    it('emits deserializer lib with custom lexer', async () => {
-      transform(
-        {
-          'deserializer.ts': `
-import { createUcDeserializer } from 'churi';
-
-export const readValue = createUcDeserializer(String, { from: 'uriEncoded' });
-        `,
-        },
-        createUcTransformer,
-      );
-
-      await lib.compile();
-
-      const file = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
-
-      expect(file).toContain('export function readValue(');
-      expect(file).toContain('new UcURIEncodedLexer(');
-      expect(file).not.toContain('new UcChargeLexer(');
-    });
-    it('emits deserializer lib with custom inset', async () => {
-      transform(
-        {
-          'deserializer.ts': `
-import { createUcDeserializer } from 'churi';
-
-export const readValue = createUcDeserializer(String, { from: 'uriParams' });
-        `,
-        },
-        createUcTransformer,
-      );
-
-      await lib.compile();
-
-      const file = await fs.readFile(`${testDir}/test.uc-lib.js`, 'utf-8');
-
-      expect(file).toContain('export function readValue(');
-      expect(file).toContain('new UcURIParamsLexer(');
-      expect(file).toContain('new UcChargeLexer(');
-    });
     it('emits by-tokens deserializer', async () => {
       transform(
         {
           'deserializer.ts': `
 import { createUcDeserializer } from 'churi';
 
-export const readValue = createUcDeserializer(String, { from: 'tokens' });
+export const readValue = createUcDeserializer(String, { byTokens: true });
         `,
         },
         createUcTransformer,

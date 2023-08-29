@@ -130,15 +130,40 @@ export class TsOptionValue {
     );
   }
 
-  getValue(): string | number | undefined {
+  getBoolean(): boolean | undefined {
+    const value = this.getValue();
+
+    if (value === undefined || typeof value === 'boolean') {
+      return value;
+    }
+
+    throw new TsError(
+      `Value of option ${this.#name} in ${this.#options.target} expected to be a boolean constant`,
+      { node: this.#valueNode },
+    );
+  }
+
+  getValue(): string | number | boolean | null | undefined {
     const initializer = this.#initializer;
 
     if (initializer) {
-      if (ts.isStringLiteralLike(initializer)) {
-        return initializer.text;
+      if (ts.isLiteralExpression(initializer)) {
+        if (ts.isStringLiteralLike(initializer)) {
+          return initializer.text;
+        }
+        if (ts.isNumericLiteral(initializer)) {
+          return Number(initializer.text);
+        }
       }
-      if (ts.isNumericLiteral(initializer)) {
-        return Number(initializer.text);
+
+      switch (initializer.kind) {
+        case ts.SyntaxKind.TrueKeyword:
+          return true;
+        case ts.SyntaxKind.FalseKeyword:
+          return false;
+        case ts.SyntaxKind.NullKeyword:
+          return null;
+        default:
       }
 
       const {

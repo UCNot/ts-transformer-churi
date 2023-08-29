@@ -1,4 +1,4 @@
-import { UcDeserializer, UcFormatName } from 'churi';
+import { UcDeserializer } from 'churi';
 import { EsNameRegistry } from 'esgen';
 import { capitalize } from 'httongue';
 import path from 'node:path';
@@ -184,7 +184,7 @@ export class UcTransformer {
       modelId,
       from: stTfm.sourceFile.fileName,
       mode: (options.mode?.getString() as UcDeserializer.Mode | undefined) ?? 'universal',
-      format: (options.from?.getString() as UcFormatName | undefined) ?? 'charge',
+      byTokens: options.byTokens?.getBoolean() ?? false,
     });
 
     return replacement;

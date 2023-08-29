@@ -1,4 +1,4 @@
-import { UcDeserializer, UcFormatName } from 'churi';
+import { UcDeserializer } from 'churi';
 import ts from 'typescript';
 import { UctBundle } from './uct-bundle.js';
 
@@ -14,7 +14,7 @@ export interface UctCompileDeserializerFn {
   readonly modelId: ts.Identifier;
   readonly from: string;
   readonly mode: UcDeserializer.Mode;
-  readonly format: UcFormatName | 'tokens';
+  readonly byTokens: boolean;
 }
 
 export interface UctCompileSerializerFn {
