@@ -1,6 +1,7 @@
 {
   "entryPoints": ["src/mod.ts"],
   "excludePrivate": true,
-  "name": "ChURI Schema Compiler",
-  "out": "./target/typedoc"
+  "name": "ts-transformer-churi",
+  "out": "./target/typedoc",
+  "sort": ["static-first", "visibility", "enum-value-ascending", "alphabetical", "kind"]
 }
