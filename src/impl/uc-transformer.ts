@@ -20,7 +20,7 @@ export class UcTransformer {
   readonly #setup: UctSetup;
   readonly #tsRoot: TsRoot;
   readonly #bundleRegistry: UctBundleRegistry;
-  #tasks: UctTasks;
+  readonly #tasks: UctTasks;
 
   readonly #ns = new EsNameRegistry();
 

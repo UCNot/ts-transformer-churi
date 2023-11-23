@@ -60,7 +60,7 @@ export class TsOptionValue {
 
   readonly #options: TsOptionsLiteral;
   readonly #node: ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration;
-  #name: string;
+  readonly #name: string;
 
   constructor(
     options: TsOptionsLiteral,
