@@ -2,7 +2,6 @@ import { lazyValue } from '@proc7ts/primitives';
 import ts from 'typescript';
 
 export class TsFileEditor {
-
   readonly #sourceFile: ts.SourceFile;
   readonly #context: ts.TransformationContext;
   readonly #mappings = new Map<ts.Node, () => ts.Node | ts.Node[]>();
@@ -49,5 +48,4 @@ export class TsFileEditor {
   emitFile(): ts.SourceFile {
     return ts.visitNode(this.#sourceFile, node => this.emitNode(node)) as ts.SourceFile;
   }
-
 }

@@ -7,7 +7,6 @@ import { UctBundle } from './uct-bundle.js';
 import { UctSetup } from './uct-setup.js';
 
 export class UctBundleRegistry {
-
   readonly #ns = new EsNameRegistry();
   readonly #setup: UctSetup;
   #defaultBundle?: UctBundle;
@@ -76,5 +75,4 @@ export class UctBundleRegistry {
 
     return `${indexName}.${bundleName ? bundleName + '.' : ''}uc-lib.${ext}`;
   }
-
 }

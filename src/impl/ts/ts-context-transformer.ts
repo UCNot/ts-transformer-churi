@@ -1,7 +1,6 @@
 import ts from 'typescript';
 
 export abstract class TsContextTransformer {
-
   readonly #context: ts.TransformationContext;
 
   constructor(context: ts.TransformationContext) {
@@ -15,5 +14,4 @@ export abstract class TsContextTransformer {
   get factory(): ts.NodeFactory {
     return this.context.factory;
   }
-
 }

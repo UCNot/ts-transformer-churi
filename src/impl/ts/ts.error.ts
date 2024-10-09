@@ -2,7 +2,6 @@ import ts from 'typescript';
 import { TsSetup } from './ts-setup.js';
 
 export class TsError extends Error {
-
   readonly #node: ts.Node;
 
   constructor(message: string, options: TsErrorOptions) {
@@ -23,7 +22,6 @@ export class TsError extends Error {
 
     setup.reportErrors([setup.buildDiagnosticsForNode(node, message)]);
   }
-
 }
 
 export interface TsErrorOptions extends ErrorOptions {

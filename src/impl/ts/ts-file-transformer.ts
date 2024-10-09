@@ -3,7 +3,6 @@ import { TsContextTransformer } from './ts-context-transformer.js';
 import { TsFileEditor } from './ts-file-editor.js';
 
 export class TsFileTransformer extends TsContextTransformer {
-
   readonly #editor: TsFileEditor;
   readonly #imports: ts.ImportDeclaration[] = [];
 
@@ -31,5 +30,4 @@ export class TsFileTransformer extends TsContextTransformer {
 
     return this.factory.updateSourceFile(sourceFile, [...this.#imports, ...sourceFile.statements]);
   }
-
 }

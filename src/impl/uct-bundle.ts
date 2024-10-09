@@ -14,7 +14,6 @@ import { UctSetup } from './uct-setup.js';
 import { UctCompileDeserializerFn, UctCompileSerializerFn } from './uct-tasks.js';
 
 export class UctBundle {
-
   readonly #setup: UctSetup;
   #distFile: string;
   #ucdModels?: EsCode;
@@ -163,5 +162,4 @@ export class UctBundle {
       },
     );
   }
-
 }

@@ -3,7 +3,6 @@ import { TsSetup } from './ts-setup.js';
 import { TsError } from './ts.error.js';
 
 export class TsOptionsLiteral {
-
   readonly #setup: TsSetup;
   readonly #target: string;
   readonly #node: ts.ObjectLiteralExpression | undefined;
@@ -22,11 +21,11 @@ export class TsOptionsLiteral {
       for (const option of node.properties) {
         if (
           !(
-            ts.isPropertyAssignment(option)
-            || ts.isShorthandPropertyAssignment(option)
-            || ts.isMethodDeclaration(option)
-          )
-          || (!ts.isIdentifier(option.name) && !ts.isLiteralExpression(option.name))
+            ts.isPropertyAssignment(option) ||
+            ts.isShorthandPropertyAssignment(option) ||
+            ts.isMethodDeclaration(option)
+          ) ||
+          (!ts.isIdentifier(option.name) && !ts.isLiteralExpression(option.name))
         ) {
           throw new TsError(`Can not extract ${target} option`, { node: option });
         }
@@ -53,11 +52,9 @@ export class TsOptionsLiteral {
   get options(): { readonly [name: string]: TsOptionValue } {
     return this.#options;
   }
-
 }
 
 export class TsOptionValue {
-
   readonly #options: TsOptionsLiteral;
   readonly #node: ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration;
   readonly #name: string;
@@ -171,9 +168,9 @@ export class TsOptionValue {
       } = this.#options;
 
       if (
-        ts.isPropertyAccessExpression(initializer)
-        || ts.isElementAccessExpression(initializer)
-        || ts.isEnumMember(initializer)
+        ts.isPropertyAccessExpression(initializer) ||
+        ts.isElementAccessExpression(initializer) ||
+        ts.isEnumMember(initializer)
       ) {
         const value = typeChecker.getConstantValue(initializer);
 
@@ -193,5 +190,4 @@ export class TsOptionValue {
       node: this.#valueNode,
     });
   }
-
 }

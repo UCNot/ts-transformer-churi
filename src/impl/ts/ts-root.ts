@@ -2,7 +2,6 @@ import path from 'node:path';
 import ts from 'typescript';
 
 export class TsRoot {
-
   #rootDir?: string;
 
   get rootDir(): string | undefined {
@@ -31,5 +30,4 @@ export class TsRoot {
       }
     }
   }
-
 }

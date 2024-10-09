@@ -10,7 +10,6 @@ import { TsLibs } from './ts-libs.js';
 import { TsVfs } from './ts-vfs.js';
 
 export class TsSetup {
-
   readonly #program: ts.Program;
   readonly #typeChecker: ts.TypeChecker;
   readonly #vfs: TsVfs;
@@ -88,10 +87,10 @@ export class TsSetup {
       const varDeclList = parent.parent;
       const varStatement = varDeclList?.parent;
 
-      return ts.isVariableDeclarationList(varDeclList)
-        && ts.isVariableStatement(varStatement)
-        && varDeclList.flags & ts.NodeFlags.Const
-        && ts.isSourceFile(varStatement.parent)
+      return ts.isVariableDeclarationList(varDeclList) &&
+        ts.isVariableStatement(varStatement) &&
+        varDeclList.flags & ts.NodeFlags.Const &&
+        ts.isSourceFile(varStatement.parent)
         ? parent
         : undefined;
     }
@@ -147,8 +146,8 @@ export class TsSetup {
     const moduleName = modulePath.endsWith('ts')
       ? modulePath.slice(0, -2) + 'js'
       : modulePath.endsWith('tsx')
-      ? modulePath.slice(0, -3) + '.js'
-      : modulePath;
+        ? modulePath.slice(0, -3) + '.js'
+        : modulePath;
 
     const result = path.relative(relativeTo, moduleName);
     const moduleSpec = result.replaceAll(path.sep, '/');
@@ -176,5 +175,4 @@ export class TsSetup {
   reportErrors(diagnostics: readonly ts.Diagnostic[]): boolean {
     return reportTsErrors(this.#formatHost, diagnostics);
   }
-
 }

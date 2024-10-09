@@ -5,7 +5,6 @@ import { UctBundleRegistry } from './uct-bundle-registry.js';
 import { UctInit } from './uct-init.js';
 
 export class UctSetup extends TsSetup implements UcTransformerOptions {
-
   readonly #tsRoot: TsRoot;
   readonly #bundleRegistry: UctBundleRegistry;
 
@@ -32,5 +31,4 @@ export class UctSetup extends TsSetup implements UcTransformerOptions {
   get dist(): string | undefined {
     return this.#dist;
   }
-
 }

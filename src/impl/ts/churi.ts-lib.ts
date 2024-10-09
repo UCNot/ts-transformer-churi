@@ -2,7 +2,6 @@ import ts from 'typescript';
 import { TsSetup } from './ts-setup.js';
 
 export class ChuriTsLib {
-
   readonly #typeChecker: ts.TypeChecker;
   #exports?: ChuriLibExports;
 
@@ -48,7 +47,6 @@ export class ChuriTsLib {
       )!,
     };
   }
-
 }
 
 export interface ChuriLibExports {

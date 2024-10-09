@@ -16,7 +16,6 @@ import { UctSetup } from './uct-setup.js';
 import { UctTasks } from './uct-tasks.js';
 
 export class UcTransformer {
-
   readonly #setup: UctSetup;
   readonly #tsRoot: TsRoot;
   readonly #bundleRegistry: UctBundleRegistry;
@@ -44,7 +43,9 @@ export class UcTransformer {
     try {
       const editor = new TsFileEditor(sourceFile, context);
       const fileTfm = new TsFileTransformer(editor);
-      let result = ts.visitNode(sourceFile, node => this.#transform(node, fileTfm)) as ts.SourceFile;
+      let result = ts.visitNode(sourceFile, node =>
+        this.#transform(node, fileTfm),
+      ) as ts.SourceFile;
 
       result = fileTfm.transform(result);
       if (result !== sourceFile) {
@@ -258,10 +259,12 @@ export class UcTransformer {
       ),
     );
 
-    editor.mapNode(node, () => factory.updateCallExpression(node, node.expression, node.typeArguments, [
+    editor.mapNode(node, () =>
+      factory.updateCallExpression(node, node.expression, node.typeArguments, [
         modelId,
         ...node.arguments.slice(1),
-      ]));
+      ]),
+    );
 
     return { replacement, fnId, modelId };
   }
@@ -289,7 +292,6 @@ export class UcTransformer {
       fnId,
     };
   }
-
 }
 
 export interface UcTransformerInit {

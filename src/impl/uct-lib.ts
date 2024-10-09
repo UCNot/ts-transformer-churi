@@ -9,7 +9,6 @@ import { UctSetup } from './uct-setup.js';
 import { UctCompileDeserializerFn, UctCompileSerializerFn, UctTasks } from './uct-tasks.js';
 
 export class UctLib implements UctTasks {
-
   readonly #setup: UctSetup;
   readonly #bundleRegistry: UctBundleRegistry;
   readonly #printer: ts.Printer;
@@ -133,7 +132,6 @@ export class UctLib implements UctTasks {
 
     return compilerFile;
   }
-
 }
 
 const BUNDLER_FILE_NAME = 'uc-lib.bundler';

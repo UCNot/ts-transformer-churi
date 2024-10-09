@@ -17,7 +17,8 @@ describe('UcTransformer', () => {
       compileUcDeserializer: jest.fn(),
       compileUcSerializer: jest.fn(),
     };
-    createUcTransformer = (program, vfs) => new UcTransformer((setup = new UctSetup({ program, vfs })), tasks);
+    createUcTransformer = (program, vfs) =>
+      new UcTransformer((setup = new UctSetup({ program, vfs })), tasks);
   });
 
   it('discovers serializer', () => {
